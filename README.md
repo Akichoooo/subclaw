@@ -1,6 +1,6 @@
 # 🚀 /subclaw: The Universal Multi-Model Orchestrator & Proxy
 
-> **Author by: jy**
+> **Author by: Akichoooo**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
@@ -36,7 +36,7 @@ If you ask an AI coding agent to "review my entire repository", it will read tho
 
 ### 🌟 Enterprise-Grade Gateway Features:
 
-* 🛡️ **Precise Cost Tracking**: Runaway AI loops can drain your wallet. The proxy tracks every token and its cost locally across multiple models, giving you a transparent view of your exact expenditure without interrupting your massive parallel worker runs.
+* 🛡�?**Precise Cost Tracking**: Runaway AI loops can drain your wallet. The proxy tracks every token and its cost locally across multiple models, giving you a transparent view of your exact expenditure without interrupting your massive parallel worker runs.
 * 🚦 **Smart Rate Limiting**: Firing 50 read requests at once triggers `429 Too Many Requests`. The proxy automatically queues requests to respect model RPM/TPM limits.
 * 🧠 **Dynamic Tiering (Cheap/Smart/Balanced)**: Define your models by tier. Your orchestrator CLI just requests a "cheap" model, and the proxy routes it to the most optimal, cheapest API key available.
 * 🔄 **Failover & Retry**: If a cheap model's endpoint goes down, the proxy transparently fails over to backup models without crashing your orchestrator's task.
@@ -44,14 +44,14 @@ If you ask an AI coding agent to "review my entire repository", it will read tho
 
 ---
 
-## 🏗️ Architecture
+## 🏗�?Architecture
 
 ```mermaid
 graph TD
-    User([👨‍💻 User]) --> |"/subclaw refactor auth"| CLI[🧠 Orchestrator CLI<br/>Claude Code / Codex / Aider]
+    User([👨‍�?User]) --> |"/subclaw refactor auth"| CLI[🧠 Orchestrator CLI<br/>Claude Code / Codex / Aider]
     CLI --> |Spawns 10 parallel tasks| Script[📜 run-claw-pool.sh]
     
-    Script --> Proxy{🛡️ claw-proxy<br/>Rate limits & Budget}
+    Script --> Proxy{🛡�?claw-proxy<br/>Rate limits & Budget}
     
     Proxy -->|Load balances| Cheap1[🤖 Cheap Model 1]
     Proxy -->|Load balances| Cheap2[🤖 Cheap Model 2]
@@ -74,7 +74,7 @@ You can run the gateway using either native Python or Docker.
 
 First, clone the repository and set up your keys:
 ```bash
-git clone https://github.com/yourname/subclaw.git
+git clone https://github.com/Akichoooo/subclaw.git
 cd subclaw/proxy
 cp keys.example.json keys.json
 # Edit keys.json with your API keys, budget limits, and model profiles
