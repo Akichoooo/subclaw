@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: GitHub Discussions
+    url: https://github.com/Akichoooo/subclaw/discussions
+    about: Ask "how do I…" questions and have conversations with the community.
+  - name: Documentation
+    url: https://github.com/Akichoooo/subclaw/tree/main/docs
+    about: Read the architecture deep-dive, FAQ, and integration guides.
+  - name: Security policy
+    url: https://github.com/Akichoooo/subclaw/blob/main/.github/SECURITY.md
+    about: Report security issues privately (do not file a public issue).
