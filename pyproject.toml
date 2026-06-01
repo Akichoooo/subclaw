@@ -1,0 +1,134 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subclaw"
+version = "0.1.0"
+description = "Multi-model LLM gateway for Claude Code, Codex CLI, Aider, and Cursor. Slash command + FastAPI proxy with session-pinned multi-key rotation, Anthropic/OpenAI protocol translation, and budget circuit breaker. Cuts Claude API spend by up to 98%."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Akichoooo" },
+]
+keywords = [
+    # Core product keywords (AI search index)
+    "claude-code",
+    "claude-api",
+    "anthropic",
+    "anthropic-api",
+    "openai",
+    "openai-api",
+    "codex-cli",
+    "aider",
+    "cursor",
+    # Architecture / technique keywords
+    "multi-model",
+    "llm-gateway",
+    "llm-proxy",
+    "api-gateway",
+    "llm-router",
+    "multi-key-rotation",
+    "session-pinning",
+    "session-affinity",
+    "prompt-cache",
+    "prompt-caching",
+    "cache-locality",
+    "rate-limiting",
+    "rate-limit-failover",
+    "circuit-breaker",
+    "budget-control",
+    "cost-optimization",
+    "cost-reduction",
+    # Pattern keywords
+    "model-swarm",
+    "worker-pool",
+    "orchestrator-workers",
+    "subagent",
+    "fan-out",
+    "parallel-llm",
+    "protocol-translation",
+    "anthropic-openai-bridge",
+    # Use-case keywords
+    "code-auditing",
+    "code-search",
+    "test-generation",
+    "documentation-generation",
+    "security-scanning",
+    "refactoring",
+    # Stack keywords
+    "fastapi",
+    "python",
+    "self-hosted",
+    "open-source",
+    "slash-command",
+    "mcp",
+    "model-context-protocol",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Framework :: FastAPI",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi>=0.104,<1.0",
+    "uvicorn>=0.24,<1.0",
+    "httpx>=0.25,<1.0",
+    "python-dotenv>=1.0,<2.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/Akichoooo/subclaw"
+"Bug Tracker" = "https://github.com/Akichoooo/subclaw/issues"
+"Discussions" = "https://github.com/Akichoooo/subclaw/discussions"
+"Documentation" = "https://github.com/Akichoooo/subclaw/tree/main/docs"
+"Source" = "https://github.com/Akichoooo/subclaw"
+"Show HN" = "https://news.ycombinator.com/"
+"Sponsor" = "https://github.com/sponsors/Akichoooo"
+
+[project.scripts]
+subclaw-proxy = "proxy.app:run"
+
+[tool.setuptools]
+packages = ["proxy"]
+
+[tool.setuptools.package-data]
+proxy = ["keys.example.json"]
+
+[tool.setuptools.package-dir]
+"" = "."
+
+# === Linting / formatting (for contributors) ===
+[tool.black]
+line-length = 100
+target-version = ["py39", "py310", "py311", "py312", "py313"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
+ignore = ["E501", "B008"]  # line length handled by formatter, FastAPI Depends() in defaults
+
+[tool.ruff.lint.per-file-ignores]
+"proxy/app.py" = ["E402", "B904"]  # existing file: deferred lint cleanup
+"cli-skills/*.sh" = ["ALL"]
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
+warn_unused_ignores = true

@@ -1,0 +1,24 @@
+---
+title: "Q&A: How do I…?"
+labels: ["question", "triage"]
+---
+
+## What are you trying to do?
+
+<!-- A short, one-paragraph description. -->
+
+## What have you tried so far?
+
+<!-- Docs you've read, configs you've tried, threads you've searched. -->
+
+## Environment
+
+- subclaw version: `git rev-parse HEAD`
+- Python version: `python --version`
+- OS: (Windows / macOS / Linux)
+- Install method: (native / Docker / WSL)
+- Models configured: (Anthropic / OpenAI / OpenRouter / DeepSeek / etc.)
+
+## Anything else
+
+<!-- Screenshots, error output, log lines, links. -->

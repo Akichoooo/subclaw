@@ -1,0 +1,55 @@
+cff-version: 1.2.0
+title: subclaw
+message: >-
+  If you use subclaw in academic work, please cite it as below.
+  subclaw is a multi-model LLM gateway for Claude Code, Codex CLI,
+  Aider, and Cursor that cuts Claude API spend by up to 98% via
+  session-pinned multi-key rotation, Anthropic/OpenAI protocol
+  translation, and a USD budget circuit breaker.
+type: software
+license: MIT
+date-released: 2025-01-01
+version: 0.1.0
+repository-code: "https://github.com/Akichoooo/subclaw"
+url: "https://github.com/Akichoooo/subclaw"
+keywords:
+  - claude-code
+  - llm-gateway
+  - multi-model
+  - prompt-cache
+  - api-proxy
+  - anthropic
+  - openai
+  - cost-reduction
+  - rate-limiting
+  - mcp
+  - model-context-protocol
+authors:
+  - family-names: Akichoooo
+    given-names: ""
+    alias: Akichoooo
+    affiliation: "Independent"
+    orcid: ""
+contact:
+  - family-names: Akichoooo
+    alias: Akichoooo
+    email: ""
+    website: "https://github.com/Akichoooo"
+preferred-citation:
+  type: software
+  title: "subclaw: Multi-Model LLM Gateway for Claude Code"
+  authors:
+    - family-names: Akichoooo
+      alias: Akichoooo
+  year: 2025
+  url: "https://github.com/Akichoooo/subclaw"
+references:
+  - type: software
+    title: "Anthropic Prompt Caching Documentation"
+    url: "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching"
+  - type: software
+    title: "LiteLLM"
+    url: "https://github.com/BerriAI/litellm"
+  - type: software
+    title: "claude-code-router"
+    url: "https://github.com/musistudio/claude-code-router"

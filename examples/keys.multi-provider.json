@@ -1,0 +1,103 @@
+{
+  "_comment": "Example: production multi-provider setup. Three providers (Anthropic, OpenAI, DeepSeek), three tiers (cheap/balanced/smart), with failovers. Replace REPLACE_WITH_* placeholders. Designed for real workloads with high cache locality needs.",
+  "keys": [
+    {
+      "key": "REPLACE_WITH_ANTHROPIC_KEY_OPUS",
+      "url": "https://api.anthropic.com",
+      "model_id": "claude-3-5-sonnet-20241022",
+      "alias": "sonnet-smart",
+      "provider": "anthropic",
+      "protocol": "anthropic",
+      "tier": "smart",
+      "capabilities": {
+        "context_window": 200000,
+        "max_output": 8192,
+        "supports_tools": true,
+        "supports_vision": true
+      },
+      "limits": {
+        "max_rpm": 50,
+        "max_tpm": 40000,
+        "max_concurrent": 5
+      },
+      "cost_per_1m_in": 3.0,
+      "cost_per_1m_out": 15.0
+    },
+    {
+      "key": "REPLACE_WITH_ANTHROPIC_KEY_HAIKU",
+      "url": "https://api.anthropic.com",
+      "model_id": "claude-3-haiku-20240307",
+      "alias": "haiku-cheap",
+      "provider": "anthropic",
+      "protocol": "anthropic",
+      "tier": "cheap",
+      "capabilities": {
+        "context_window": 200000,
+        "max_output": 4096,
+        "supports_tools": true
+      },
+      "limits": {
+        "max_rpm": 50,
+        "max_tpm": 50000,
+        "max_concurrent": 5
+      },
+      "cost_per_1m_in": 0.25,
+      "cost_per_1m_out": 1.25
+    },
+    {
+      "key": "REPLACE_WITH_OPENAI_KEY",
+      "url": "https://api.openai.com/v1",
+      "model_id": "gpt-4o-mini",
+      "alias": "gpt-4o-mini-cheap",
+      "provider": "openai",
+      "protocol": "openai",
+      "tier": "cheap",
+      "capabilities": {
+        "context_window": 128000,
+        "max_output": 16384,
+        "supports_tools": true
+      },
+      "limits": {
+        "max_rpm": 500,
+        "max_tpm": 2000000,
+        "max_concurrent": 20
+      },
+      "cost_per_1m_in": 0.15,
+      "cost_per_1m_out": 0.60
+    },
+    {
+      "key": "REPLACE_WITH_DEEPSEEK_KEY",
+      "url": "https://api.deepseek.com/v1",
+      "model_id": "deepseek-chat",
+      "alias": "deepseek-cheap",
+      "provider": "deepseek",
+      "protocol": "openai",
+      "tier": "cheap",
+      "capabilities": {
+        "context_window": 64000,
+        "max_output": 8000,
+        "supports_tools": true
+      },
+      "limits": {
+        "max_rpm": 200,
+        "max_tpm": 500000,
+        "max_concurrent": 10
+      },
+      "cost_per_1m_in": 0.14,
+      "cost_per_1m_out": 0.28
+    }
+  ],
+  "global_proxy_settings": {
+    "circuit_breaker": {
+      "max_spend_per_session_usd": 5.0,
+      "max_spend_per_day_usd": 50.0
+    },
+    "security": {
+      "mask_secrets_in_payload": true,
+      "forbidden_paths": ["**/.env", "**/*.pem", "**/id_rsa", "**/.ssh/**"]
+    },
+    "features": {
+      "auto_prompt_caching": true
+    }
+  }
+}

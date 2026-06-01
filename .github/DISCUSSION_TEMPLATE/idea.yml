@@ -1,0 +1,22 @@
+---
+title: "Idea: <one-line summary>"
+labels: ["idea", "triage"]
+---
+
+## The problem
+
+<!-- What pain point? Who's affected? How often? -->
+
+## The proposed solution
+
+<!-- A clear, one-paragraph description of what you want. -->
+
+## Alternatives you've considered
+
+<!-- What else did you think about? Why is this better? -->
+
+## Would you implement it?
+
+- [ ] I'd love to write a PR
+- [ ] I'd help review
+- [ ] I'm just throwing the idea out

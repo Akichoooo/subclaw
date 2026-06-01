@@ -1,0 +1,26 @@
+---
+title: "Show and tell: I built X with subclaw"
+labels: ["show-and-tell"]
+---
+
+## What did you build?
+
+<!-- One-paragraph description of the project / workflow / tool. -->
+
+## How does it use subclaw?
+
+<!-- Which features? Slash command? Direct API? MCP? Be specific. -->
+
+## What's the impact?
+
+<!-- Numbers are great: cost savings, latency improvement, lines of code generated, time saved. -->
+
+## Links
+
+- Source: (GitHub / blog post / etc.)
+- Demo: (asciinema / video / screenshots)
+- Writeup: (blog / HN / Reddit)
+
+## Anything else?
+
+<!-- Lessons learned, things that surprised you, what you'd like subclaw to do next. -->

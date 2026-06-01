@@ -1,0 +1,63 @@
+# Docker Compose for subclaw multi-model LLM gateway.
+#
+# Quick start:
+#   1. cp .env.example .env   (then edit .env with your API keys, or mount keys.json directly)
+#   2. docker compose up -d
+#   3. curl http://localhost:4748/health
+#   4. (Optional) install the slash command in Claude Code:
+#        docker compose cp subclaw:/app/cli-skills ./cli-skills
+#
+# The proxy binds to localhost:4748 by default. DO NOT expose 4748 on a
+# public network without authentication — the proxy has no built-in auth.
+# See docs/faq.md for guidance on safe deployment.
+
+services:
+  subclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: akichoooo/subclaw:latest
+    container_name: subclaw-proxy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4748:4748"   # bound to loopback only — do NOT change to 0.0.0.0
+    environment:
+      # The proxy reads keys.json from /app/proxy/keys.json by default.
+      # We can either bind-mount a keys.json file, or pass keys via env.
+      # Option A: bind mount (recommended for production)
+      #   - ./proxy/keys.json:/app/proxy/keys.json:ro
+      # Option B: env-driven (uncomment below)
+      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set in .env}
+      # OPENAI_API_KEY:    ${OPENAI_API_KEY:?set in .env}
+      PROXY_PORT: "4748"
+      LOG_LEVEL: "INFO"
+    volumes:
+      # Mount your keys.json in read-only mode. NEVER commit keys.json to git.
+      - ./proxy/keys.json:/app/proxy/keys.json:ro
+      # Optional: persist stats / dashboard state across restarts
+      - subclaw-data:/app/proxy/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4748/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # Resource limits — adjust for your hardware. The proxy itself is light.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    # Logging
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  subclaw-data:
+    driver: local

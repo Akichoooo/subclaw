@@ -1,0 +1,55 @@
+# Git attributes for the subclaw repository.
+#
+# Helps GitHub Linguist correctly identify the project's primary language
+# and ensures consistent line endings across platforms.
+
+# Default behavior: detect text files and normalize line endings to LF on commit.
+# But the original repo used CRLF, so we keep CRLF for source files.
+* text=auto eol=crlf
+
+# Python: always LF inside the file (Pythonic standard), but the .gitattributes
+# is set to CRLF for the rest of the repo. The file is detected by extension.
+*.py text eol=lf
+
+# Shell scripts: must be LF for POSIX compatibility.
+*.sh text eol=lf
+
+# Markdown: render in GitHub with whatever the file has.
+*.md text
+
+# YAML: must be LF.
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# TOML: must be LF.
+*.toml text eol=lf
+
+# JSON: must be LF (some parsers are strict about line endings).
+*.json text eol=lf
+
+# Dockerfiles: must be LF.
+Dockerfile text eol=lf
+
+# Makefile: must be LF.
+Makefile text eol=lf
+
+# License: keep as-is (LF is fine, but CRLF also works).
+LICENSE text eol=lf
+
+# Binary files: do not touch.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.svg binary
+
+# Git LFS: not currently used, but reserve for future binary assets.
+# *.tar.gz filter=lfs diff=lfs merge=lfs -text
+
+# Exclude vendored / generated files from diffs and language stats.
+docs/awesome-list-submissions.md linguist-documentation
+docs/seo-keywords.md linguist-documentation
+docs/blog-post-devto.md linguist-documentation
+docs/show-hn-post.md linguist-documentation
+llms.txt linguist-documentation
+llms-full.txt linguist-documentation

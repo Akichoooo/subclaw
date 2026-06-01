@@ -1,0 +1,60 @@
+{
+  "_comment": "Example: budget-tight setup. Strict USD caps, single cheap provider, low RPM. Designed for hobby projects, students, or anyone on a tight Claude API budget. Tighter limits = harder to accidentally burn money.",
+  "keys": [
+    {
+      "key": "REPLACE_WITH_DEEPSEEK_KEY",
+      "url": "https://api.deepseek.com/v1",
+      "model_id": "deepseek-chat",
+      "alias": "deepseek-cheap",
+      "provider": "deepseek",
+      "protocol": "openai",
+      "tier": "cheap",
+      "capabilities": {
+        "context_window": 64000,
+        "max_output": 8000,
+        "supports_tools": true
+      },
+      "limits": {
+        "max_rpm": 20,
+        "max_tpm": 50000,
+        "max_concurrent": 2
+      },
+      "cost_per_1m_in": 0.14,
+      "cost_per_1m_out": 0.28
+    },
+    {
+      "key": "REPLACE_WITH_OPENAI_KEY",
+      "url": "https://api.openai.com/v1",
+      "model_id": "gpt-4o-mini",
+      "alias": "gpt-4o-mini-cheap",
+      "provider": "openai",
+      "protocol": "openai",
+      "tier": "cheap",
+      "capabilities": {
+        "context_window": 128000,
+        "max_output": 16384,
+        "supports_tools": true
+      },
+      "limits": {
+        "max_rpm": 60,
+        "max_tpm": 250000,
+        "max_concurrent": 3
+      },
+      "cost_per_1m_in": 0.15,
+      "cost_per_1m_out": 0.60
+    }
+  ],
+  "global_proxy_settings": {
+    "circuit_breaker": {
+      "max_spend_per_session_usd": 0.50,
+      "max_spend_per_day_usd": 2.00
+    },
+    "security": {
+      "mask_secrets_in_payload": true,
+      "forbidden_paths": ["**/.env", "**/*.pem", "**/id_rsa", "**/.ssh/**", "**/credentials*"]
+    },
+    "features": {
+      "auto_prompt_caching": true
+    }
+  }
+}
