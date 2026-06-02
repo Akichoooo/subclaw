@@ -7,13 +7,13 @@
 **斜杠命令 + FastAPI 代理。** 会话钉定的多 Key 轮询、Anthropic 与 OpenAI 协议双向翻译、限流故障转移、预算熔断器。
 **将 Claude API 成本最多降低 98%** —— 把繁重任务下发给廉价模型集群，让 Opus 只做最终审计。
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688.svg)](https://fastapi.tiangolo.com/)
-[![自托管](https://img.shields.io/badge/自托管-100%25-success.svg)]()
-[![无 SaaS](https://img.shields.io/badge/无_SaaS-数据不出本机-orange.svg)]()
-[![Anthropic 兼容](https://img.shields.io/badge/Anthropic-兼容-D97757.svg)]()
-[![OpenAI 兼容](https://img.shields.io/badge/OpenAI-兼容-412991.svg)]()
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688.svg)
+![自托管](https://img.shields.io/badge/自托管-100%25-success.svg)
+![无 SaaS](https://img.shields.io/badge/无_SaaS-数据不出本机-orange.svg)
+![Anthropic 兼容](https://img.shields.io/badge/Anthropic-兼容-D97757.svg)
+![OpenAI 兼容](https://img.shields.io/badge/OpenAI-兼容-412991.svg)
 
 [快速开始](#-快速开始) · [工作原理](#-工作原理) · [完整文档](docs/) · [English](README.md) · [常见问题](docs/faq.md)
 

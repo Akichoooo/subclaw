@@ -7,13 +7,13 @@
 **Slash command + FastAPI proxy.** Session-pinned multi-key rotation, Anthropic↔OpenAI protocol translation, rate-limit failover, budget circuit breaker.
 **Reduce Claude API spend by up to 98%** by dispatching heavy tasks to a swarm of cheap worker models.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688.svg)](https://fastapi.tiangolo.com/)
-[![Self-Hosted](https://img.shields.io/badge/self--hosted-100%25-success.svg)]()
-[![No SaaS](https://img.shields.io/badge/no_SaaS-lock--in--free-orange.svg)]()
-[![Anthropic Compatible](https://img.shields.io/badge/Anthropic-compatible-D97757.svg)]()
-[![OpenAI Compatible](https://img.shields.io/badge/OpenAI-compatible-412991.svg)]()
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688.svg)
+![Self-Hosted](https://img.shields.io/badge/self--hosted-100%25-success.svg)
+![No SaaS](https://img.shields.io/badge/no_SaaS-lock--in--free-orange.svg)
+![Anthropic Compatible](https://img.shields.io/badge/Anthropic-compatible-D97757.svg)
+![OpenAI Compatible](https://img.shields.io/badge/OpenAI-compatible-412991.svg)
 
 [Quick Start](#-quick-start) · [How It Works](#-how-it-works) · [Docs](docs/) · [中文文档](README_zh.md) · [FAQ](docs/faq.md)
 
