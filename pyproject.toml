@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "subclaw"
 version = "0.1.0"
-description = "Multi-model LLM gateway for Claude Code, Codex CLI, Aider, and Cursor. Slash command + FastAPI proxy with session-pinned multi-key rotation, Anthropic/OpenAI protocol translation, and budget circuit breaker. Cuts Claude API spend by up to 98%."
+description = "Multi-model LLM gateway for Claude Code, Codex CLI, Aider, and Cursor. Slash command + FastAPI proxy with session-pinned multi-key rotation, Anthropic/OpenAI protocol translation, and budget circuit breaker. Cuts Claude API spend by 60-90% on read-heavy workloads."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [

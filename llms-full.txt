@@ -10,7 +10,7 @@
 
 ### Multi-Model LLM Gateway for Claude Code · Codex CLI · Aider · Cursor
 
-**Slash command + FastAPI proxy.** Session-pinned multi-key rotation, Anthropic↔OpenAI protocol translation, rate-limit failover, budget circuit breaker. **Reduce Claude API spend by up to 98%** by dispatching heavy tasks to a swarm of cheap worker models.
+**Slash command + FastAPI proxy.** Session-pinned multi-key rotation, Anthropic↔OpenAI protocol translation, rate-limit failover, budget circuit breaker. **Cut Claude API spend by 60-90% on read-heavy workloads** by dispatching the heavy reading to a swarm of cheap worker models.
 
 ## The Problem
 
@@ -25,7 +25,7 @@ If you use **Claude Code, Codex CLI, Aider, or Cursor** for serious work, you ha
 
 ## Why subclaw
 
-- 98% cost reduction: heavy work (scan, draft, find) goes to cheap models; Opus only audits the final summary.
+- 60-90% lower spend (read-heavy): heavy work (scan, draft, find) goes to models ~15-20x cheaper; Opus only audits the final summary.
 - Bypass 429 rate limits: N API keys, round-robin across worker sessions, transparent failover on throttling.
 - Prompt cache locality: each session is pinned to one key so Anthropic's prompt cache stays warm. Up to 90% cache hit rate.
 - Drop-in protocol translation: workers using Claude Code (Anthropic protocol) can hit OpenAI endpoints transparently. No code changes.
@@ -96,9 +96,9 @@ The killer detail: `x-session-id` session affinity. A worker that finishes a mul
 
 | Scenario | Single Opus (no proxy) | subclaw (Opus + cheap swarm) | Saving |
 |---|---|---|---|
-| Audit 50 files (50k tokens) | $7.50 input + 10× loop ≈ $75.00 | Opus: $0.10 + 50× Haiku parallel $0.0075 ≈ $0.11 | ~99% |
-| Repo-wide grep (200k tokens) | $30 input | $0.30 (200k input × $1.50/1M cached) | ~99% |
-| Daily budget: 20 audits/day | ~$1,500 | ~$15 | ~99% |
+| Audit 50 files (50k tokens) | $7.50 input + 10× loop ≈ $75.00 | Opus: $0.10 + 50× Haiku parallel $0.0075 ≈ $0.11 | ~99% (est.) |
+| Repo-wide grep (200k tokens) | $30 input | $0.30 (200k input × $1.50/1M cached) | ~99% (est.) |
+| Daily budget: 20 audits/day | ~$1,500 | ~$15 | ~99% (est.) |
 
 ## Comparison
 
@@ -369,7 +369,7 @@ A: Yes via the proxy translation.
 ## Cost & performance
 
 Q: How much can I realistically save?
-A: 80-98% input cost reduction on scan/search/draft workloads.
+A: 60-90% input cost reduction on read-heavy (scan/search/draft) workloads.
 
 Q: How is the cache hit rate?
 A: 70-90% on multi-turn worker tasks. See /stats endpoint.
@@ -455,9 +455,9 @@ Anti-patterns: frontier reasoning, one-shot Q&A, tasks under 5k tokens, latency-
 
 | Workload | Opus only | subclaw | Saving |
 |---|---|---|---|
-| Audit 50 files (50k tokens), Opus loops 10× | $75.00 | $0.11 | ~99% |
-| Repo-wide grep (200k tokens) | $30.00 | $0.30 | ~99% |
-| Daily: 20 audits + 5 greps + 10 doc sweeps | ~$1,500/day | ~$15/day | ~99% |
+| Audit 50 files (50k tokens), Opus loops 10× | $75.00 | $0.11 | ~99% (est.) |
+| Repo-wide grep (200k tokens) | $30.00 | $0.30 | ~99% (est.) |
+| Daily: 20 audits + 5 greps + 10 doc sweeps | ~$1,500/day | ~$15/day | ~99% (est.) |
 | Monthly projection | ~$1,871 | ~$375 | ~80% |
 
 ### Cache hit rate

@@ -3,7 +3,7 @@ title: subclaw
 message: >-
   If you use subclaw in academic work, please cite it as below.
   subclaw is a multi-model LLM gateway for Claude Code, Codex CLI,
-  Aider, and Cursor that cuts Claude API spend by up to 98% via
+  Aider, and Cursor that cuts Claude API spend by 60-90% on read-heavy workloads via
   session-pinned multi-key rotation, Anthropic/OpenAI protocol
   translation, and a USD budget circuit breaker.
 type: software

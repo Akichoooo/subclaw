@@ -2,7 +2,7 @@
 # https://github.com/Akichoooo/subclaw
 #
 # A self-hosted FastAPI proxy + slash-command orchestration framework that
-# reduces Claude API spend by up to 98% by fanning heavy work to cheap
+# reduces Claude API spend by 60-90% on read-heavy workloads by fanning heavy work to cheap
 # worker models, with session-pinned prompt-cache locality and a USD
 # budget circuit breaker.
 
@@ -42,7 +42,7 @@ CMD ["uvicorn", "proxy.app:app", "--host", "0.0.0.0", "--port", "4748", "--worke
 
 # === Build-time metadata ===
 LABEL org.opencontainers.image.title="subclaw" \
-      org.opencontainers.image.description="Multi-model LLM gateway for Claude Code. Cuts Claude API spend by up to 98% via session-pinned multi-key rotation, protocol translation, and budget circuit breaker." \
+      org.opencontainers.image.description="Multi-model LLM gateway for Claude Code. Cuts Claude API spend by 60-90% on read-heavy workloads via session-pinned multi-key rotation, protocol translation, and budget circuit breaker." \
       org.opencontainers.image.url="https://github.com/Akichoooo/subclaw" \
       org.opencontainers.image.source="https://github.com/Akichoooo/subclaw" \
       org.opencontainers.image.licenses="MIT" \

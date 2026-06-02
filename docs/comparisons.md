@@ -91,7 +91,7 @@
 - **No prompt-cache locality optimization.** Requests are routed per-call, not per-session.
 - **No budget circuit breaker.**
 - **No swarm / fan-out.** Each request goes to one model. subclaw's `/subclaw` slash command decomposes a goal into N briefs and fans them out.
-- **Lighter feature surface overall.** Good for "let me use DeepSeek instead of Opus"; not designed for "let me slash my Claude bill by 98%."
+- **Lighter feature surface overall.** Good for "let me use DeepSeek instead of Opus"; not designed for "let me slash my Claude bill."
 
 **When to pick claude-code-router over subclaw**: you just want to swap the model Claude Code uses, and you don't have a 429 problem. It's also more mature for that single use case.
 

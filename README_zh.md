@@ -5,7 +5,7 @@
 ### 面向 Claude Code / Codex CLI / Aider / Cursor 的多模型 LLM 网关
 
 **斜杠命令 + FastAPI 代理。** 会话钉定的多 Key 轮询、Anthropic 与 OpenAI 协议双向翻译、限流故障转移、预算熔断器。
-**将 Claude API 成本最多降低 98%** —— 把繁重任务下发给廉价模型集群，让 Opus 只做最终审计。
+**在以读取为主的工作负载上，将 Claude API 成本降低 60-90%** —— 把繁重的读取下发给廉价模型集群，让 Opus 只做最终审计。
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)
@@ -38,7 +38,7 @@
 
 | 你能拿到 | 实现方式 |
 |---|---|
-| **98% 成本下降** | 扫、起草、检索等重活交给廉价模型；Opus 只审计最终摘要。 |
+| **成本下降 60-90%**（读取密集型） | 扫、起草、检索等重活交给比 Opus 便宜约 15-20 倍的模型；Opus 只审计最终摘要。 |
 | **绕过 429 限流** | 多把 API Key 在 worker session 之间轮询，限流时自动漂移。 |
 | **提示缓存亲和性** | 每个 session 钉在同一把 Key，Anthropic 提示缓存持续命中，最高 90%。 |
 | **协议自动翻译** | 使用 Claude Code（Anthropic 协议）的 worker 可以直连 OpenAI 端点，零代码改动。 |
@@ -126,11 +126,13 @@ chmod +x ~/.claude/scripts/run-claw-pool.sh
 
 ## 基准数据
 
+> *基于下方假设的示意性测算，非独立实测；实际节省随工作负载差异很大。*
+
 | 场景 | 单独 Opus（无代理） | subclaw（Opus + 廉价虫群） | 节省 |
 |---|---|---|---|
-| 审计 50 个文件（5 万 token） | 7.5 美元输入 + 10 次循环 ≈ 75 美元 | Opus 0.10 美元 + 50 路 Haiku 并行 0.0075 美元 ≈ 0.11 美元 | **约 99%** |
-| 全仓库 grep（20 万 token） | 30 美元输入 | 0.30 美元（20 万输入 × 1.50/1M 缓存价） | **约 99%** |
-| 每日预算：20 次审计 | 约 1500 美元 | 约 15 美元 | **约 99%** |
+| 审计 50 个文件（5 万 token） | 7.5 美元输入 + 10 次循环 ≈ 75 美元 | Opus 0.10 美元 + 50 路 Haiku 并行 0.0075 美元 ≈ 0.11 美元 | **约 99%（估算）** |
+| 全仓库 grep（20 万 token） | 30 美元输入 | 0.30 美元（20 万输入 × 1.50/1M 缓存价） | **约 99%（估算）** |
+| 每日预算：20 次审计 | 约 1500 美元 | 约 15 美元 | **约 99%（估算）** |
 
 方法论与完整数据见 [`docs/benchmarks.md`](docs/benchmarks.md)。
 
@@ -229,7 +231,7 @@ chmod +x ~/.claude/scripts/run-claw-pool.sh
 - Anthropic 团队实现的 prompt cache——整套架构都建立在这项能力之上。
 - `claude-code-router` 项目，最早在 Claude Code 上提出多模型思路。
 - LiteLLM 项目，向社区展示了协议翻译可以走多远。
-- 提交 issue、PR 和点过 Star 的每一位朋友。🙏
+- 每一位提交 issue、PR 或愿意试用的朋友。🙏
 
 ---
 

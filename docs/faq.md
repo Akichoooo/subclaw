@@ -117,7 +117,7 @@ Yes for the proxy; for the worker side, the worker must speak Anthropic protocol
 
 ### How much can I realistically save?
 
-If your workload is mostly "scan, search, draft" (which is most of what subclaw is good at), expect **80-98%** input cost reduction compared to running everything on Opus.
+If your workload is mostly "scan, search, draft" (which is most of what subclaw is good at), expect **60-90%** input cost reduction compared to running everything on Opus.
 
 Real numbers are in [`benchmarks.md`](benchmarks.md). Quick example:
 

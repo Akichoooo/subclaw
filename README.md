@@ -5,7 +5,7 @@
 ### Multi-Model LLM Gateway for Claude Code · Codex CLI · Aider · Cursor
 
 **Slash command + FastAPI proxy.** Session-pinned multi-key rotation, Anthropic↔OpenAI protocol translation, rate-limit failover, budget circuit breaker.
-**Reduce Claude API spend by up to 98%** by dispatching heavy tasks to a swarm of cheap worker models.
+**Cut Claude API spend by 60-90% on read-heavy workloads** by dispatching the heavy reading to a swarm of cheap worker models.
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)
@@ -38,7 +38,7 @@ If you use **Claude Code, Codex CLI, Aider, or Cursor** for serious work, you ha
 
 | What you get | How it works |
 |---|---|
-| **98% cost reduction** | Heavy work (scan, draft, find) goes to cheap models; Opus only audits the final summary. |
+| **60-90% lower spend** (read-heavy) | Heavy work (scan, draft, find) goes to models ~15-20x cheaper; Opus only audits the final summary. |
 | **Bypass 429 rate limits** | N API keys, round-robin across worker sessions, transparent failover on throttling. |
 | **Prompt cache locality** | Each session is **pinned to one key** so Anthropic's prompt cache stays warm. Up to 90% cache hit rate. |
 | **Drop-in protocol translation** | Workers using Claude Code (Anthropic protocol) can hit OpenAI endpoints transparently. No code changes. |
@@ -126,11 +126,13 @@ See [`docs/use-cases.md`](docs/use-cases.md) for the full playbook.
 
 ## Benchmarks
 
+> *Illustrative projections from the assumptions shown below — not independently measured. Real savings vary heavily by workload.*
+
 | Scenario | Single Opus (no proxy) | subclaw (Opus + cheap swarm) | Saving |
 |---|---|---|---|
-| Audit 50 files (50k tokens) | `$7.50` input + 10× loop ≈ `$75.00` | Opus: `$0.10` + 50× Haiku parallel `$0.0075` ≈ `$0.11` | **~99%** |
-| Repo-wide grep (200k tokens) | $30 input | $0.30 (200k input × $1.50/1M cached) | **~99%** |
-| Daily budget: 20 audits/day | ~$1,500 | ~$15 | **~99%** |
+| Audit 50 files (50k tokens) | `$7.50` input + 10× loop ≈ `$75.00` | Opus: `$0.10` + 50× Haiku parallel `$0.0075` ≈ `$0.11` | **~99% (est.)** |
+| Repo-wide grep (200k tokens) | $30 input | $0.30 (200k input × $1.50/1M cached) | **~99% (est.)** |
+| Daily budget: 20 audits/day | ~$1,500 | ~$15 | **~99% (est.)** |
 
 See [`docs/benchmarks.md`](docs/benchmarks.md) for methodology and full data.
 
@@ -229,7 +231,7 @@ We welcome PRs. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) first.
 - The Anthropic team for prompt caching — the entire architecture hinges on `cache_read_input_tokens`.
 - The `claude-code-router` project for pioneering the multi-model idea for Claude Code.
 - The LiteLLM project for showing the community what's possible with protocol translation.
-- Everyone who has filed an issue, opened a PR, or starred the repo. 🙏
+- Everyone who files an issue, opens a PR, or kicks the tires. 🙏
 
 ---
 

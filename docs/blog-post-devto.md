@@ -1,4 +1,4 @@
-# How I cut my Claude bill 98% with a multi-model LLM gateway
+# How I cut my Claude bill ~80% with a multi-model LLM gateway
 
 > Long-form blog post. Cross-post to [dev.to](https://dev.to), [hashnode](https://hashnode.com), and [Medium](https://medium.com). Cover image: 1280×640 PNG with the title, a screenshot of the dashboard, and the subclaw logo. The image should be uploaded alongside the post.
 

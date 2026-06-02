@@ -1,6 +1,6 @@
 # Benchmarks
 
-Real numbers for cost, cache hit rate, and latency. All measurements taken with `subclaw` v0.1.0 against Anthropic's `claude-3-5-sonnet-20241022` (main) and `claude-3-haiku-20240307` (cheap worker).
+Estimated cost, cache-hit, and latency figures, modeled with `subclaw` v0.1.0 against Anthropic's `claude-3-5-sonnet-20241022` (main) and `claude-3-haiku-20240307` (cheap worker). These are **projections from the math below, not an independently audited benchmark**.
 
 > **Caveat**: your mileage will vary. These are typical results from the author's workload (TypeScript monorepo, ~200k tokens, daily batch audits). Your prompts, prefix sizes, and tool counts will produce different numbers.
 
@@ -10,9 +10,9 @@ Real numbers for cost, cache hit rate, and latency. All measurements taken with 
 
 | Workload | Opus only | subclaw (Opus + Haiku swarm) | Saving |
 |---|---|---|---|
-| Audit 50 files (50k tokens), Opus loops 10× | **$75.00** | **$0.11** | **~99%** |
-| Repo-wide grep (200k tokens) | $30.00 | $0.30 | **~99%** |
-| Daily: 20 audits + 5 greps + 10 doc sweeps | ~$1,500/day | ~$15/day | **~99%** |
+| Audit 50 files (50k tokens), Opus loops 10× | **$75.00** | **$0.11** | **~99% (est.)** |
+| Repo-wide grep (200k tokens) | $30.00 | $0.30 | **~99% (est.)** |
+| Daily: 20 audits + 5 greps + 10 doc sweeps | ~$1,500/day | ~$15/day | **~99% (est.)** |
 
 ---
 
@@ -97,7 +97,7 @@ effective_price = 0.88 × cache_price + 0.12 × full_price
 
 **That's a 79% reduction on input cost alone**, before the swarm parallelism kicks in.
 
-The combination of swarm + cache locality is where the 98% headline number comes from.
+The combination of swarm + cache locality is where the headline cost reduction comes from.
 
 ---
 

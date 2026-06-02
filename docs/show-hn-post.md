@@ -7,7 +7,7 @@
 ## Title (max 80 chars)
 
 ```
-Show HN: subclaw – slash-command + gateway that cut my Claude bill 98%
+Show HN: subclaw – slash-command + gateway that cut my Claude bill ~80%
 ```
 
 (67 chars. Good.)
