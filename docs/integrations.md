@@ -13,7 +13,9 @@ This page covers the most common integrations. If yours isn't here, [open an iss
 ```bash
 cp ./cli-skills/claude/subclaw.md ~/.claude/commands/
 cp ./cli-skills/run-claw-pool.sh ~/.claude/scripts/
+cp ./cli-skills/live_tree_ui.py ~/.claude/scripts/
 chmod +x ~/.claude/scripts/run-claw-pool.sh
+chmod +x ~/.claude/scripts/live_tree_ui.py
 ```
 
 See the [README](../README.md#-quick-start) for the full quick start.
@@ -33,6 +35,7 @@ Codex CLI from OpenAI supports custom base URLs.
    [model_providers.claw]
    name = "subclaw gateway"
    base_url = "http://localhost:4748/v1"
+   wire_api = "responses"
    env_key = "OPENAI_API_KEY"   # any non-empty value works; the proxy injects the real key
    ```
 
@@ -48,6 +51,14 @@ Codex CLI from OpenAI supports custom base URLs.
    ```
 
 **Note**: Codex CLI will pass OpenAI-protocol requests to the proxy, which the proxy translates to Anthropic-protocol upstream (or to OpenAI-protocol if you've configured OpenAI-compatible backends in `keys.json`).
+
+For Codex orchestration with the bundled `$subclaw` skill, copy the skill directory:
+
+```powershell
+$dest = Join-Path $env:USERPROFILE ".codex\skills\subclaw"
+New-Item -ItemType Directory -Force -Path $dest | Out-Null
+Copy-Item -Recurse -Force .\cli-skills\codex\subclaw\* $dest
+```
 
 ---
 
@@ -179,10 +190,10 @@ print(resp.content[0].text)
 
 If your tool speaks either protocol, it can talk to subclaw. The proxy is just a FastAPI app on `localhost:4748` that:
 
-- Accepts `/v1/messages` (Anthropic) and `/v1/chat/completions` (OpenAI)
+- Accepts `/v1/messages` (Anthropic), `/v1/chat/completions` (OpenAI), and `/v1/responses` (Codex/OpenAI Responses)
 - Auto-translates between protocols
 - Routes to whatever's in `keys.json`
 - Pins sessions to keys (with the `x-session-id` header)
-- Tracks spend and enforces the budget circuit breaker
+- Tracks status through `/api/status` and `/stats`
 
 That's the entire surface. No special SDK, no lock-in.

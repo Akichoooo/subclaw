@@ -94,7 +94,9 @@ python app.py
 ```bash
 cp ./cli-skills/claude/subclaw.md ~/.claude/commands/
 cp ./cli-skills/run-claw-pool.sh ~/.claude/scripts/
+cp ./cli-skills/live_tree_ui.py ~/.claude/scripts/
 chmod +x ~/.claude/scripts/run-claw-pool.sh
+chmod +x ~/.claude/scripts/live_tree_ui.py
 ```
 
 **For Codex CLI / Aider / Cursor:** see [`docs/integrations.md`](docs/integrations.md).

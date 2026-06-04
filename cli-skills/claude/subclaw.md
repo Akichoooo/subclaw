@@ -112,7 +112,7 @@ By default the pool points at **claw-proxy** (`http://localhost:4748`), which:
 - enforces **spend limits (Circuit Breaker)** to protect your wallet against runaway swarms,
 - translates protocol so Anthropic-protocol passthrough preserves `tool_use` (workers keep Read/Glob/Grep).
 
-Start the proxy first (`python app.py` in the proxy dir, default `D:\Docker Project\ai-proxy\claw-proxy`). If it's down, pass `--direct` to fall back to per-worker keys from `~/.claude/scripts/claw-keys.tsv`.
+Start the proxy first (`docker compose up -d` from the repo root, or `python app.py` in `proxy/`). If it's down, pass `--direct` to fall back to per-worker keys from `~/.claude/scripts/claw-keys.tsv`.
 
 ### Pool dispatch
 ```bash

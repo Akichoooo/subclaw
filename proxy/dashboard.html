@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claw Proxy Dashboard</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101010;
+      --band: #171717;
+      --panel: #202020;
+      --panel-2: #262626;
+      --line: #3a3a3a;
+      --text: #eeeeee;
+      --muted: #a7a7a7;
+      --green: #40c463;
+      --amber: #e3b341;
+      --red: #ff6b6b;
+      --cyan: #39c5cf;
+      --violet: #b58cff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(16, 16, 16, .96);
+      border-bottom: 1px solid var(--line);
+    }
+    .topbar {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      justify-content: space-between;
+    }
+    h1 {
+      font-size: 18px;
+      margin: 0;
+      font-weight: 650;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      white-space: nowrap;
+      font-size: 12px;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--amber);
+    }
+    .dot.ok { background: var(--green); }
+    .dot.bad { background: var(--red); }
+    main {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+    .span-5 { grid-column: span 5; }
+    .span-6 { grid-column: span 6; }
+    .span-7 { grid-column: span 7; }
+    .span-8 { grid-column: span 8; }
+    .span-12 { grid-column: span 12; }
+    .section-head {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--band);
+    }
+    h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 650;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .body { padding: 14px; }
+    .metric-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 78px;
+    }
+    .metric .label {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .metric .value {
+      margin-top: 8px;
+      font-size: 24px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    th, td {
+      padding: 9px 8px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      background: #1b1b1b;
+    }
+    tr:last-child td { border-bottom: 0; }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+    }
+    pre {
+      margin: 0;
+      padding: 12px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0b0b0b;
+      max-height: 240px;
+    }
+    .snippet {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .snippet:last-child { margin-bottom: 0; }
+    .snippet-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    button {
+      border: 1px solid var(--line);
+      background: #2b2b2b;
+      color: var(--text);
+      border-radius: 6px;
+      min-height: 30px;
+      padding: 5px 9px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+    }
+    button:hover { border-color: var(--cyan); }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #2a2a2a;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .tag.ok { color: var(--green); border-color: rgba(64,196,99,.5); }
+    .tag.warn { color: var(--amber); border-color: rgba(227,179,65,.5); }
+    .tag.err { color: var(--red); border-color: rgba(255,107,107,.5); }
+    .tag.codex { color: var(--cyan); border-color: rgba(57,197,207,.5); }
+    .tag.anthropic { color: var(--violet); border-color: rgba(181,140,255,.5); }
+    .empty {
+      color: var(--muted);
+      padding: 18px 0;
+      text-align: center;
+    }
+    .muted { color: var(--muted); }
+    .good { color: var(--green); }
+    .warn { color: var(--amber); }
+    .bad { color: var(--red); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+    .list {
+      display: grid;
+      gap: 8px;
+    }
+    .kv {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .kv:last-child { border-bottom: 0; }
+    @media (max-width: 1100px) {
+      .span-3, .span-4, .span-5, .span-6, .span-7, .span-8 { grid-column: span 12; }
+      .metric-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 680px) {
+      .topbar { align-items: flex-start; flex-direction: column; }
+      main { padding: 12px; }
+      .metric-row, .two-col { grid-template-columns: 1fr; }
+      th:nth-child(4), td:nth-child(4),
+      th:nth-child(5), td:nth-child(5) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <div>
+        <h1>Claw Proxy Dashboard</h1>
+        <div class="sub">Anthropic Messages, OpenAI Chat Completions, and Codex Responses on one key pool.</div>
+      </div>
+      <div class="status-pill" id="health-pill"><span class="dot" id="health-dot"></span><span id="health-text">Loading</span></div>
+    </div>
+  </header>
+
+  <main>
+    <div class="grid">
+      <section class="span-12">
+        <div class="section-head">
+          <h2>Runtime</h2>
+          <span class="muted" id="updated-at">Waiting for status</span>
+        </div>
+        <div class="body metric-row">
+          <div class="metric"><div class="label">Requests</div><div class="value" id="m-requests">0</div></div>
+          <div class="metric"><div class="label">Real keys</div><div class="value" id="m-keys">0</div></div>
+          <div class="metric"><div class="label">Cache hit rate</div><div class="value" id="m-cache">0%</div></div>
+          <div class="metric"><div class="label">Retries</div><div class="value" id="m-retries">0</div></div>
+        </div>
+      </section>
+
+      <section class="span-5">
+        <div class="section-head">
+          <h2>Use From Codex</h2>
+          <span class="tag codex">/v1/responses</span>
+        </div>
+        <div class="body">
+          <div class="snippet">
+            <div class="snippet-title"><span>Provider config</span><button data-copy="codex-config">Copy</button></div>
+            <pre id="codex-config">[model_providers.claw]
+name = "claw"
+base_url = "http://localhost:4748/v1"
+wire_api = "responses"</pre>
+          </div>
+          <div class="snippet">
+            <div class="snippet-title"><span>One-off test</span><button data-copy="codex-test">Copy</button></div>
+            <pre id="codex-test">codex exec "print OK" -c 'model_provider="claw"' -c 'model="&lt;model-id&gt;"' -c 'model_providers.claw.name="claw"' -c 'model_providers.claw.base_url="http://localhost:4748/v1"' -c 'model_providers.claw.wire_api="responses"'</pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="span-4">
+        <div class="section-head">
+          <h2>Use From subclaw</h2>
+          <span class="tag anthropic">/v1/messages</span>
+        </div>
+        <div class="body">
+          <div class="snippet">
+            <div class="snippet-title"><span>Discover capacity</span><button data-copy="subclaw-info">Copy</button></div>
+            <pre id="subclaw-info">bash ~/.claude/scripts/run-claw-pool.sh --info</pre>
+          </div>
+          <div class="snippet">
+            <div class="snippet-title"><span>Run worker pool</span><button data-copy="subclaw-run">Copy</button></div>
+            <pre id="subclaw-run">bash ~/.claude/scripts/run-claw-pool.sh -j 2 -m &lt;model-id&gt; -w "&lt;workdir&gt;" -d "&lt;brief-dir&gt;"</pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="span-3">
+        <div class="section-head">
+          <h2>OpenAI Clients</h2>
+          <span class="tag">/v1/chat/completions</span>
+        </div>
+        <div class="body list">
+          <div class="kv"><span class="muted">Base URL</span><span class="mono">http://localhost:4748/v1</span></div>
+          <div class="kv"><span class="muted">Auth</span><span class="mono">Bearer proxy-managed</span></div>
+          <div class="kv"><span class="muted">Model</span><span class="mono" id="default-model">&lt;model-id&gt;</span></div>
+          <div class="kv"><span class="muted">Secrets</span><span>server-side only</span></div>
+        </div>
+      </section>
+
+      <section class="span-6">
+        <div class="section-head">
+          <h2>Models</h2>
+          <span class="muted" id="model-count">0 available</span>
+        </div>
+        <div class="body" id="models-table"></div>
+      </section>
+
+      <section class="span-6">
+        <div class="section-head">
+          <h2>Key Pool</h2>
+          <span class="muted">suffix only</span>
+        </div>
+        <div class="body" id="keys-table"></div>
+      </section>
+
+      <section class="span-7">
+        <div class="section-head">
+          <h2>Recent Routes</h2>
+          <span class="muted">Codex, subclaw, and OpenAI traffic</span>
+        </div>
+        <div class="body" id="routes-table"></div>
+      </section>
+
+      <section class="span-5">
+        <div class="section-head">
+          <h2>Sessions</h2>
+          <span class="muted">worker to key affinity</span>
+        </div>
+        <div class="body" id="sessions-table"></div>
+      </section>
+
+      <section class="span-12">
+        <div class="section-head">
+          <h2>Compat Counters</h2>
+          <span class="muted">proxy-side repairs and upstream health</span>
+        </div>
+        <div class="body two-col">
+          <div id="compat-list" class="list"></div>
+          <pre id="raw-status">{}</pre>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const fmt = new Intl.NumberFormat();
+    const shortTime = (ts) => ts ? new Date(ts * 1000).toLocaleTimeString() : "";
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]));
+    const tagClass = (status) => {
+      const s = String(status || "");
+      if (s.includes("error") || s.includes("fail")) return "err";
+      if (s.includes("retry") || s.includes("stream")) return "warn";
+      return "ok";
+    };
+    function table(headers, rows, empty) {
+      if (!rows.length) return `<div class="empty">${esc(empty || "No data")}</div>`;
+      return `<table><thead><tr>${headers.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
+    }
+    function setText(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    }
+    async function copyFrom(id) {
+      const text = document.getElementById(id)?.textContent || "";
+      await navigator.clipboard.writeText(text);
+    }
+    document.addEventListener("click", (event) => {
+      const btn = event.target.closest("button[data-copy]");
+      if (!btn) return;
+      copyFrom(btn.dataset.copy).then(() => {
+        const old = btn.textContent;
+        btn.textContent = "Copied";
+        setTimeout(() => btn.textContent = old, 900);
+      });
+    });
+    async function fetchJson(url) {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`${url} returned ${res.status}`);
+      return res.json();
+    }
+    async function refresh() {
+      try {
+        const [status, models] = await Promise.all([fetchJson("/api/status"), fetchJson("/models")]);
+        document.getElementById("health-dot").className = "dot ok";
+        setText("health-text", `Online on :4748, uptime ${status.uptime_seconds || 0}s`);
+        setText("updated-at", `Updated ${new Date().toLocaleTimeString()}`);
+        setText("m-requests", fmt.format(status.requests || 0));
+        setText("m-keys", `${status.key_pool?.real || 0}/${status.key_pool?.total || 0}`);
+        setText("m-cache", status.cache_hit_rate || "0%");
+        setText("m-retries", fmt.format(status.compat_layer?.upstream_retries || 0));
+        const modelList = models.data || [];
+        const defaultModel = models.default_model || modelList[0]?.id || "<model-id>";
+        const defaultInfo = modelList.find(m => m.id === defaultModel) || modelList[0] || {};
+        const safeJobs = Math.max(1, Math.min(2, Number(defaultInfo.key_count ?? defaultInfo.capacity ?? 1) || 1));
+        setText("default-model", defaultModel);
+        setText("codex-test", `codex exec "print OK" -c 'model_provider="claw"' -c 'model="${defaultModel}"' -c 'model_providers.claw.name="claw"' -c 'model_providers.claw.base_url="http://localhost:4748/v1"' -c 'model_providers.claw.wire_api="responses"'`);
+        setText("subclaw-run", `bash ~/.claude/scripts/run-claw-pool.sh -j ${safeJobs} -m ${defaultModel} -w "<workdir>" -d "<brief-dir>"`);
+        setText("model-count", `${models.data?.length || 0} available`);
+
+        const modelRows = (models.data || []).map(m => `<tr>
+          <td><span class="mono">${esc(m.id)}</span><br><span class="muted">${esc(m.alias || "")}</span></td>
+          <td><span class="tag">${esc(m.tier || "balanced")}</span></td>
+          <td>${esc(m.key_count ?? m.capacity ?? 0)}</td>
+          <td>${esc((m.capabilities || []).join(", "))}</td>
+          <td>${esc(m.context_window || "")}</td>
+        </tr>`);
+        document.getElementById("models-table").innerHTML = table(["Model", "Tier", "Keys", "Caps", "Context"], modelRows, "No models configured");
+
+        const keyRows = (status.key_pool?.keys || []).map(k => `<tr>
+          <td>#${esc(k.index)} <span class="tag ${k.real ? "ok" : "err"}">${k.real ? "real" : "placeholder"}</span></td>
+          <td><span class="mono">...${esc(k.suffix || "")}</span></td>
+          <td>${esc(k.protocol)}<br><span class="muted">${esc(k.tier)}</span></td>
+          <td>${esc((k.models || []).join(", ") || "*")}</td>
+          <td>${esc(k.requests || 0)} / ${esc(k.failures || 0)}</td>
+        </tr>`);
+        document.getElementById("keys-table").innerHTML = table(["Key", "Suffix", "Route", "Models", "Req/Fail"], keyRows, "No keys loaded");
+
+        const routeRows = (status.recent_routes || []).slice(0, 18).map(r => `<tr>
+          <td>${esc(shortTime(r.ts))}</td>
+          <td><span class="tag ${esc(r.client)}">${esc(r.client)}</span><br><span class="muted">${esc(r.path)}</span></td>
+          <td><span class="mono">${esc(r.model)}</span></td>
+          <td><span class="mono">...${esc(r.key_suffix || "")}</span><br><span class="muted">${esc(r.protocol || "")}</span></td>
+          <td><span class="tag ${tagClass(r.status)}">${esc(r.status)}</span><br><span class="muted">${esc(r.session_id || "")}</span></td>
+        </tr>`);
+        document.getElementById("routes-table").innerHTML = table(["Time", "Client", "Model", "Key", "Status"], routeRows, "No routed requests yet");
+
+        const sessionRows = Object.entries(status.sessions || {}).slice(-24).reverse().map(([sid, info]) => `<tr>
+          <td><span class="mono">${esc(sid)}</span></td>
+          <td>#${esc(info.key_index)}</td>
+          <td><span class="mono">...${esc(info.key_suffix || "")}</span></td>
+        </tr>`);
+        document.getElementById("sessions-table").innerHTML = table(["Session", "Key", "Suffix"], sessionRows, "No pinned sessions yet");
+
+        const compat = status.compat_layer || {};
+        document.getElementById("compat-list").innerHTML = Object.entries(compat).map(([k, v]) =>
+          `<div class="kv"><span class="muted">${esc(k)}</span><span class="mono">${esc(v)}</span></div>`
+        ).join("") || `<div class="empty">No counters</div>`;
+        document.getElementById("raw-status").textContent = JSON.stringify({
+          tokens: status.tokens,
+          cost_saved_cny: status.cost_saved_cny,
+          keys_config: status.keys_config
+        }, null, 2);
+      } catch (err) {
+        document.getElementById("health-dot").className = "dot bad";
+        setText("health-text", err.message);
+        setText("updated-at", `Last error ${new Date().toLocaleTimeString()}`);
+      }
+    }
+    refresh();
+    setInterval(refresh, 1500);
+  </script>
+</body>
+</html>

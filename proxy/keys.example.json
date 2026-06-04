@@ -1,5 +1,5 @@
 {
-  "_comment": "Claw-Proxy advanced configuration. Define your models, keys, and advanced routing rules (rate limits, budgets, failovers) here.",
+  "_comment": "Claw Proxy configuration. Copy to keys.json and replace placeholders with real upstream keys.",
   "models": [
     {
       "key": "REPLACE_WITH_PRIMARY_KEY",
@@ -8,58 +8,37 @@
       "alias": "haiku-cheap",
       "provider": "anthropic",
       "protocol": "anthropic",
-      "tier": "cheap",
-      "fallback_models": ["gpt-4o-mini"],
-      
+      "tier": "primary",
       "capabilities": {
         "context_window": 200000,
         "max_output": 4096,
         "supports_tools": true,
         "supports_vision": true
       },
-      
       "limits": {
-        "max_rpm": 50,
-        "max_tpm": 50000,
         "max_concurrent": 5
       },
-      
       "cost_per_1m_in": 0.25,
       "cost_per_1m_out": 1.25
     },
     {
       "key": "REPLACE_WITH_OPENAI_PROTOCOL_KEY",
-      "url": "https://api.openai.com/v1",
+      "url": "https://api.openai.com",
       "model_id": "gpt-4o-mini",
       "alias": "openai-cheap",
       "provider": "openai",
       "protocol": "openai",
-      "tier": "cheap",
+      "tier": "primary",
       "capabilities": {
         "context_window": 128000,
         "max_output": 16384,
         "supports_tools": true
       },
       "limits": {
-        "max_rpm": 500,
-        "max_tpm": 2000000,
         "max_concurrent": 20
       },
       "cost_per_1m_in": 0.15,
       "cost_per_1m_out": 0.60
     }
-  ],
-  "global_proxy_settings": {
-    "circuit_breaker": {
-      "max_spend_per_session_usd": 2.0,
-      "max_spend_per_day_usd": 10.0
-    },
-    "security": {
-      "mask_secrets_in_payload": true,
-      "forbidden_paths": ["**/.env", "**/*.pem"]
-    },
-    "features": {
-      "auto_prompt_caching": true
-    }
-  }
+  ]
 }

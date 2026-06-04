@@ -47,8 +47,9 @@ python app.py
 You should see:
 
 ```
-[claw-proxy] PREFIX FREEZE | fp=... | system prompt locked (...)
-[claw-proxy] proxy listening on http://0.0.0.0:4748
+2026-06-05 02:30:00,000 [claw-proxy] Claw proxy starting on port 4748
+2026-06-05 02:30:00,000 [claw-proxy] Keys config: /path/to/subclaw/proxy/keys.json
+2026-06-05 02:30:00,000 [claw-proxy] Key pool: 2 configured, 2 real
 ```
 
 ## 4. Verify it works (30 seconds)
@@ -81,7 +82,9 @@ You should get a valid response with `"content": [{"type": "text", "text": "..."
 cd ..
 cp cli-skills/claude/subclaw.md ~/.claude/commands/
 cp cli-skills/run-claw-pool.sh ~/.claude/scripts/
+cp cli-skills/live_tree_ui.py ~/.claude/scripts/
 chmod +x ~/.claude/scripts/run-claw-pool.sh
+chmod +x ~/.claude/scripts/live_tree_ui.py
 ```
 
 Restart Claude Code. Type `/` in the prompt — you should see `/subclaw` in the command list.
@@ -111,7 +114,7 @@ That's the whole point. The 50,000 tokens of TODO comments in your repo would ha
 If you want to see the dashboard:
 
 ```bash
-open http://localhost:4748/dashboard
+open http://localhost:4748/ui
 ```
 
 ---

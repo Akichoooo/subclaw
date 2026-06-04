@@ -62,12 +62,15 @@ install-skill:   ## Install the /subclaw slash command for Claude Code.
 	@mkdir -p $$HOME/.claude/commands $$HOME/.claude/scripts
 	cp cli-skills/claude/subclaw.md $$HOME/.claude/commands/subclaw.md
 	cp cli-skills/run-claw-pool.sh $$HOME/.claude/scripts/run-claw-pool.sh
+	cp cli-skills/live_tree_ui.py $$HOME/.claude/scripts/live_tree_ui.py
 	chmod +x $$HOME/.claude/scripts/run-claw-pool.sh
+	chmod +x $$HOME/.claude/scripts/live_tree_ui.py
 	@echo "Slash command installed. Restart Claude Code and try /subclaw."
 
 uninstall-skill:   ## Remove the /subclaw slash command.
 	rm -f $$HOME/.claude/commands/subclaw.md
 	rm -f $$HOME/.claude/scripts/run-claw-pool.sh
+	rm -f $$HOME/.claude/scripts/live_tree_ui.py
 	@echo "Slash command removed."
 
 stats:   ## Curl the proxy /stats endpoint.
@@ -77,4 +80,4 @@ health:   ## Curl the proxy /health endpoint.
 	@curl -sS http://localhost:$(PORT)/health | $(PYTHON) -m json.tool
 
 dashboard:   ## Open the dashboard in your default browser.
-	@command -v xdg-open >/dev/null 2>&1 && xdg-open http://localhost:$(PORT)/dashboard || open http://localhost:$(PORT)/dashboard
+	@command -v xdg-open >/dev/null 2>&1 && xdg-open http://localhost:$(PORT)/ui || open http://localhost:$(PORT)/ui

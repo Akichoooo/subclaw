@@ -1,0 +1,22 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+proxy/keys.json
+proxy/keys.*.json
+!proxy/keys.example.json
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local reports/runtime
+claw-reports/
+codex-claw-reports/
+.ai_agents/
+
+# OS/editor
+.DS_Store
