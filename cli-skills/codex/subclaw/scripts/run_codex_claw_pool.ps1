@@ -112,6 +112,7 @@ while ($queue.Count -gt 0 -or $running.Count -gt 0) {
     $base = [IO.Path]::GetFileNameWithoutExtension($taskPath)
     $report = Join-Path $OutDir "$base.codexclaw.$Stamp.md"
     $statusPath = Join-Path $OutDir ("worker_{0:000}.status.json" -f $idx)
+    $sid = "codex-pool-$Stamp-$base-w$idx"
     $prompt = Get-Content -LiteralPath $taskPath -Raw
     $workerPrompt = @"
 You are a Codex subclaw worker. Follow the brief exactly.
@@ -129,7 +130,7 @@ Return a concise evidence packet, not a transcript.
 $prompt
 "@
     Write-JsonFile $statusPath @{ model=$Model; msg="$base starting"; running=$true; status="RUNNING"; elapsed=0 }
-    Set-Content -LiteralPath $report -Encoding UTF8 -Value "[META]`ntask: $taskPath`nmodel: $Model`nengine: codex-cli`nendpoint: $ProxyUrl/v1`nstarted: $(Get-Date -Format o)`n[/META]`n`n[OUTPUT]"
+    Set-Content -LiteralPath $report -Encoding UTF8 -Value "[META]`ntask: $taskPath`nmodel: $Model`nengine: codex-cli`nendpoint: $ProxyUrl/v1`nsession: $sid`nstarted: $(Get-Date -Format o)`n[/META]`n`n[OUTPUT]"
 
     $promptFile = "$report.prompt"
     Set-Content -LiteralPath $promptFile -Encoding UTF8 -Value $workerPrompt
@@ -143,6 +144,7 @@ $prompt
       "-c", 'model_providers.claw.name="claw"',
       "-c", ('model_providers.claw.base_url="{0}/v1"' -f $ProxyUrl.TrimEnd('/')),
       "-c", 'model_providers.claw.wire_api="responses"',
+      "-c", ('model_providers.claw.http_headers={"x-codex-session-id"="{0}"}' -f $sid),
       "-"
     )
     $outFile = "$report.stdout"

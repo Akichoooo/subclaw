@@ -75,6 +75,8 @@ Codex worker engine:
   -Workdir "<abs-workdir>" -BriefDir "<abs-brief-dir>" -Model "<model-id>" -Jobs 2
 ```
 
+The Codex runner injects a per-worker `x-codex-session-id` provider header via `-c` overrides so Claw Proxy can pin each worker to one key across tool loops.
+
 Use Claude engine for the established `/subclaw` pool behavior. Use Codex engine when Codex CLI workers should call Claw Proxy through the Responses API.
 
 5. Show live status inside Codex CLI.
