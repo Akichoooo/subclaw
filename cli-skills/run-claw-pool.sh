@@ -113,14 +113,20 @@ VALID_PERM="default acceptEdits bypassPermissions"
 _trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
 parse_brief_frontmatter() {
   local f="$1"
-  local in_fm=0 tools_out="" perm_out=""
-  # Only treat as frontmatter if it is the very first line of the file.
+  local in_fm=0 tools_out="" perm_out="" has_fm="no"
+  # Only treat as frontmatter if it is the very first line of the file AND
+  # there is a closing '---' (a matched pair). A lone leading '---' with no
+  # closer is a decorative horizontal rule, NOT frontmatter — we must not
+  # strip it or we'd send the worker an empty prompt.
   local first
   first="$(head -n1 "$f" 2>/dev/null)"
-  [ "$first" = "---" ] || { echo ""; echo ""; return 0; }
+  [ "$first" = "---" ] || { echo ""; echo ""; echo "no"; return 0; }
   while IFS= read -r line; do
-    [ "$line" = "---" ] && { in_fm=$((in_fm+1)); [ "$in_fm" -ge 2 ] && break; continue; }
-    [ "$line" = "---" ] && continue
+    [ "$line" = "---" ] && {
+      in_fm=$((in_fm+1))
+      if [ "$in_fm" -ge 2 ]; then has_fm="yes"; break; fi
+      continue
+    }
     case "$line" in
       tools:*)
         raw="$(_trim "${line#tools:}")"
@@ -140,6 +146,7 @@ parse_brief_frontmatter() {
   done < "$f"
   echo "$tools_out"
   echo "$perm_out"
+  echo "$has_fm"
 }
 
 while [ $# -gt 0 ]; do
@@ -431,17 +438,19 @@ PY
     prompt="$(cat "$task")"
     # Per-brief frontmatter override (--- tools: ... / permission: ... ---).
     # Falls back to the global $TOOLS / $PERMMODE when absent or empty.
-    local task_tools="$TOOLS" task_perm="$PERMMODE"
+    local task_tools="$TOOLS" task_perm="$PERMMODE" fm_has="no"
     local fm_tools fm_perm
-    { read -r fm_tools; read -r fm_perm; } < <(parse_brief_frontmatter "$task")
+    { read -r fm_tools; read -r fm_perm; read -r fm_has; } < <(parse_brief_frontmatter "$task")
     [ -n "$fm_tools" ] && task_tools="$fm_tools"
     [ -n "$fm_perm" ] && task_perm="$fm_perm"
     [ "$task_tools" != "$TOOLS" ] || [ "$task_perm" != "$PERMMODE" ] && \
       echo "[META] per-brief override: tools=$task_tools perm=$task_perm (global: tools=$TOOLS perm=$PERMMODE)" >> "$report"
-    # If frontmatter was present, strip it from the prompt sent to the worker
-    # so the worker doesn't see the YAML block as content.
-    if [ "$(head -n1 "$task")" = "---" ]; then
-      prompt="$(awk 'BEGIN{f=0} /^---$/{f++; next} f>=2{print}' "$task")"
+    # Strip the frontmatter block from the prompt ONLY when a matched --- pair
+    # was found. A lone leading '---' (decorative horizontal rule) or a
+    # frontmatter missing its closer must NOT be stripped, or the worker would
+    # receive an empty/garbled prompt.
+    if [ "$fm_has" = "yes" ]; then
+      prompt="$(awk 'BEGIN{f=0} /^---$/{f++; if(f>=2){f=-1; next} next} f>=1{next} f==-1{print}' "$task")"
     fi
     (
       cd "$WORKDIR" &&
