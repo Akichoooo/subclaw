@@ -405,7 +405,7 @@ smart
 
 ## Output contract
 - return_format: boolean (with evidence)
-- Write detailed findings to runs/task-N-judge-<round>-<stamp>.md
+- Write detailed findings to `.ai_agents/judges/task-N-judge-<round>-<stamp>.md` (relative to the worker's working directory — this lands alongside the `.ai_agents/shared/` mailbox and `.ai_agents/reports/`, so the `/orchestration` endpoint can find it)
 - End with EXACTLY one verdict line:
   JUDGE_VERDICT: TRUE   |  (all criteria met)
   JUDGE_VERDICT: PARTIAL |  <one line: what's still missing>
@@ -413,6 +413,8 @@ smart
 ```
 
 Dispatch with a generous timeout (judges read more than drafters): `-T 1200`.
+
+> Path note: the proxy's `/orchestration` endpoint searches `.ai_agents/judges/`, `.ai_agents/reports/`, and (for backward compatibility) a sibling `runs/` dir under the workdir root configured via `ORCH_REPORTS_DIR`. Keeping judge transcripts under `.ai_agents/judges/` keeps them next to the worker reports and mailbox, and guarantees the dashboard sees them.
 
 ---
 

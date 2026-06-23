@@ -1383,14 +1383,47 @@ def _read_worker_statuses(reports_dir: str) -> List[Dict[str, Any]]:
     return out
 
 
-def _read_judge_verdicts(reports_dir: str) -> List[Dict[str, Any]]:
-    """Scan reports_dir (and a sibling runs/ dir) for judge transcripts and extract the
-    latest verdict per task. Returns a list sorted by mtime."""
+def _read_judge_verdicts(reports_dir: str, root_abs: str = "") -> List[Dict[str, Any]]:
+    """Scan for judge transcripts and extract the latest verdict per task.
+
+    Search locations (all bounded by root_abs when provided, to avoid reading
+    outside the configured root):
+      - reports_dir itself (judge transcripts occasionally land here)
+      - <sibling of reports_dir>/judges  i.e. .ai_agents/judges  (canonical, per the judge brief)
+      - <workdir>/runs  (legacy path, for older briefs)
+    Returns a list sorted by mtime (newest first)."""
     verdicts: List[Dict[str, Any]] = []
-    search_dirs = [reports_dir]
-    runs_dir = os.path.join(os.path.dirname(reports_dir), "runs")
-    if os.path.isdir(runs_dir):
-        search_dirs.append(runs_dir)
+    root_real = os.path.realpath(root_abs) if root_abs else ""
+    reports_real = os.path.realpath(reports_dir)
+
+    def _within_root(p: str) -> bool:
+        if not root_real:
+            return True
+        pr = os.path.realpath(p)
+        return pr == root_real or pr.startswith(root_real + os.sep)
+
+    search_dirs: List[str] = [reports_dir]
+    parent = os.path.dirname(reports_real)
+    candidates = [
+        os.path.join(parent, "judges"),     # .ai_agents/judges  (canonical)
+        os.path.join(parent, "runs"),        # .ai_agents/runs   (legacy sibling)
+    ]
+    # workdir-root /runs: walk up from reports_dir to root, check runs/ at each level
+    cand = reports_real
+    for _ in range(3):
+        cand = os.path.dirname(cand)
+        candidates.append(os.path.join(cand, "runs"))
+        if cand == root_real or os.path.dirname(cand) == cand:
+            break
+
+    for d in candidates:
+        if not _within_root(d) or not os.path.isdir(d):
+            continue
+        if d in search_dirs:
+            continue
+        search_dirs.append(d)
+
+    seen_paths: set = set()
     for d in search_dirs:
         try:
             names = os.listdir(d)
@@ -1400,6 +1433,9 @@ def _read_judge_verdicts(reports_dir: str) -> List[Dict[str, Any]]:
             if "judge" not in name.lower() or not name.endswith(".md"):
                 continue
             full = os.path.join(d, name)
+            if full in seen_paths:
+                continue
+            seen_paths.add(full)
             try:
                 with open(full, "r", encoding="utf-8", errors="replace") as fh:
                     text = fh.read()
@@ -1456,10 +1492,10 @@ def _read_shared_mailbox(reports_dir: str, root_abs: str) -> List[Dict[str, Any]
 def orchestration_payload(reports_dir: str) -> Dict[str, Any]:
     pool = _latest_pool_status(reports_dir)
     workers = _read_worker_statuses(reports_dir)
-    judges = _read_judge_verdicts(reports_dir)
     root_abs = os.path.realpath(
         os.path.join(APP_DIR, ORCH_REPORTS_DIR) if not os.path.isabs(ORCH_REPORTS_DIR) else ORCH_REPORTS_DIR
     )
+    judges = _read_judge_verdicts(reports_dir, root_abs)
     mailbox = _read_shared_mailbox(reports_dir, root_abs)
     # Count distinct judge rounds (files with 'judge' and a round marker in name).
     judge_round = len({j["file"] for j in judges})
