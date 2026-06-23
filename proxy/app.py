@@ -1497,8 +1497,23 @@ def orchestration_payload(reports_dir: str) -> Dict[str, Any]:
     )
     judges = _read_judge_verdicts(reports_dir, root_abs)
     mailbox = _read_shared_mailbox(reports_dir, root_abs)
-    # Count distinct judge rounds (files with 'judge' and a round marker in name).
-    judge_round = len({j["file"] for j in judges})
+    # judge_round = highest round number seen across judge transcripts (parsed
+    # from filenames like 'task-N-judge-<round>-<stamp>.md'). Falls back to the
+    # count of distinct judge files if no round number is parseable. Using max
+    # avoids a retry within the same round (which produces a new stamp and thus
+    # a new file) inflating the counter past the cap and falsely flagging red.
+    round_re = re.compile(r"judge[^\d]*(\d+)", re.IGNORECASE)
+    max_round = 0
+    parsed_any = False
+    for j in judges:
+        m = round_re.search(os.path.basename(j["file"]))
+        if m:
+            parsed_any = True
+            try:
+                max_round = max(max_round, int(m.group(1)))
+            except ValueError:
+                pass
+    judge_round = max_round if parsed_any else len({j["file"] for j in judges})
     return {
         "enabled": True,
         "reports_dir": reports_dir,
