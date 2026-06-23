@@ -1344,12 +1344,41 @@ def _safe_reports_root(requested: str) -> Optional[str]:
     return target_abs if os.path.isdir(target_abs) else None
 
 
+# Cap on the size of an orchestrator-produced file we're willing to read into
+# memory (pool_status.json, worker_*.status.json, judge transcripts). Defends
+# against a runaway/malicious worker producing a multi-GB file that would OOM
+# the proxy. 10MB is far above any legitimate status/transcript; if a judge
+# transcript exceeds this, something is wrong and we skip it.
+_ORCH_MAX_FILE_BYTES = 10 * 1024 * 1024
+
+
 def _read_json_safe(path: str) -> Dict[str, Any]:
     try:
+        size = os.path.getsize(path)
+        if size > _ORCH_MAX_FILE_BYTES:
+            logger.warning("orchestration: skipping oversized JSON %s (%d bytes)", path, size)
+            return {}
         with open(path, "r", encoding="utf-8") as fh:
             return json.load(fh)
     except Exception:
         return {}
+
+
+def _read_text_capped(path: str, cap: int = _ORCH_MAX_FILE_BYTES) -> Optional[str]:
+    """Read a file with a size cap; returns None if the file is larger than cap
+    (so callers skip it) or on read error."""
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return None
+    if size > cap:
+        logger.warning("orchestration: skipping oversized file %s (%d bytes > %d)", path, size, cap)
+        return None
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except OSError:
+        return None
 
 
 def _latest_pool_status(reports_dir: str) -> Dict[str, Any]:
@@ -1436,10 +1465,8 @@ def _read_judge_verdicts(reports_dir: str, root_abs: str = "") -> List[Dict[str,
             if full in seen_paths:
                 continue
             seen_paths.add(full)
-            try:
-                with open(full, "r", encoding="utf-8", errors="replace") as fh:
-                    text = fh.read()
-            except OSError:
+            text = _read_text_capped(full)
+            if text is None:
                 continue
             # The judge brief requires 'End with EXACTLY one verdict line', so the
             # authoritative verdict is the LAST JUDGE_VERDICT: in the transcript —
