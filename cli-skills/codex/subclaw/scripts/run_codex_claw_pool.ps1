@@ -69,6 +69,9 @@ function Read-WorkerMarkers($Path) {
 # Returns @{ tools = @(...); permission = "..."; body = "..." } (body = file content minus frontmatter).
 # Codex maps to sandbox: if tools contain Bash/Edit/Write => workspace-write, else read-only.
 # Known tools: Read Glob Grep Bash Edit Write NotebookEdit (others ignored with a warning).
+# A lone leading '---' (decorative horizontal rule) or an UNCLOSED frontmatter block
+# is NOT treated as frontmatter — body falls back to the full file so the worker
+# never receives an empty prompt. Mirrors the bash runner's has_fm contract.
 function Parse-BriefFrontmatter($Path) {
   $result = @{ tools = @(); permission = ""; body = "" }
   if (-not (Test-Path -LiteralPath $Path)) { return $result }
@@ -78,9 +81,10 @@ function Parse-BriefFrontmatter($Path) {
   $known = @("Read","Glob","Grep","Bash","Edit","Write","NotebookEdit")
   $validPerm = @("default","acceptEdits","bypassPermissions")
   $bodyStart = 0
+  $closed = $false
   for ($i = 1; $i -lt $lines.Count; $i++) {
     $line = $lines[$i].Trim()
-    if ($line -eq "---") { $bodyStart = $i + 1; break }
+    if ($line -eq "---") { $bodyStart = $i + 1; $closed = $true; break }
     if ($line -match '^tools:\s*(.*)$') {
       $raw = $Matches[1]
       foreach ($tok in ($raw -split '[, ]+' | Where-Object { $_ })) {
@@ -94,8 +98,15 @@ function Parse-BriefFrontmatter($Path) {
       else { Write-Output "frontmatter: ignoring invalid permission '$p' in $Path" }
     }
   }
-  if ($bodyStart -gt 0 -and $bodyStart -lt $lines.Count) {
+  if ($closed -and $bodyStart -gt 0 -and $bodyStart -lt $lines.Count) {
     $result.body = ($lines[$bodyStart..($lines.Count-1)] -join "`n")
+  } else {
+    # No closing '---' found: not real frontmatter. Preserve the full file
+    # as the body (and drop any tools/permission we partially parsed, since
+    # they came from an unclosed block). Safe backward-compatible behavior.
+    $result.tools = @()
+    $result.permission = ""
+    $result.body = ($lines -join "`n")
   }
   return $result
 }

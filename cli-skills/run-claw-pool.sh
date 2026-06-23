@@ -144,6 +144,13 @@ parse_brief_frontmatter() {
         ;;
     esac
   done < "$f"
+  # If no closing '---' was found, this wasn't real frontmatter. Drop any
+  # tools/permission we partially parsed from the unclosed block — they must
+  # not override the global flags. Mirrors the Codex runner's behavior.
+  if [ "$has_fm" != "yes" ]; then
+    tools_out=""
+    perm_out=""
+  fi
   echo "$tools_out"
   echo "$perm_out"
   echo "$has_fm"
