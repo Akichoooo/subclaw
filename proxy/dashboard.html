@@ -522,10 +522,10 @@ wire_api = "responses"</pre>
 
         const statusTag = (s) => {
           const v = String(s || "").toUpperCase();
-          if (v === "OK" || v === "true") return `<span class="tag ok">${esc(v)}</span>`;
-          if (v.includes("partial")) return `<span class="tag warn">${esc(v)}</span>`;
-          if (v.includes("fail") || v.includes("false") || v.includes("timeout")) return `<span class="tag err">${esc(v)}</span>`;
-          if (v.includes("running")) return `<span class="tag">${esc(v)}</span>`;
+          if (v === "OK" || v === "TRUE") return `<span class="tag ok">${esc(v)}</span>`;
+          if (v.includes("PARTIAL")) return `<span class="tag warn">${esc(v)}</span>`;
+          if (v.includes("FAIL") || v.includes("FALSE") || v.includes("TIMEOUT")) return `<span class="tag err">${esc(v)}</span>`;
+          if (v.includes("RUNNING")) return `<span class="tag">${esc(v)}</span>`;
           return `<span class="tag">${esc(v || "—")}</span>`;
         };
         const workerRows = workers.map((w, i) => `<tr>

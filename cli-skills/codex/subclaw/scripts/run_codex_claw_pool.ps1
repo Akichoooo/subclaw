@@ -179,7 +179,8 @@ $prompt
 
     $promptFile = "$report.prompt"
     Set-Content -LiteralPath $promptFile -Encoding UTF8 -Value $workerPrompt
-    $args = @(
+    # NOTE: use $codexArgs, NOT $args — $args is a PowerShell automatic variable.
+    $codexArgs = @(
       "exec",
       "-m", $Model,
       "--cd", $Workdir,
@@ -194,7 +195,7 @@ $prompt
     )
     $outFile = "$report.stdout"
     $errFile = "$report.stderr"
-    $proc = Start-Process -FilePath $CodexCmd -ArgumentList $args -WorkingDirectory $Workdir -WindowStyle Hidden -RedirectStandardInput $promptFile -RedirectStandardOutput $outFile -RedirectStandardError $errFile -PassThru
+    $proc = Start-Process -FilePath $CodexCmd -ArgumentList $codexArgs -WorkingDirectory $Workdir -WindowStyle Hidden -RedirectStandardInput $promptFile -RedirectStandardOutput $outFile -RedirectStandardError $errFile -PassThru
     $running += [pscustomobject]@{ Process=$proc; Index=$idx; Base=$base; Report=$report; StatusPath=$statusPath; OutFile=$outFile; ErrFile=$errFile; Started=Get-Date }
   }
 
