@@ -345,10 +345,10 @@ Dispatch a **judge worker** — a fresh, isolated-context third party that did N
 - **Model:** smart tier (the strongest routable worker). Weakest model here defeats the purpose.
 - **Permissions:** READ-ONLY. Use the per-brief frontmatter `tools: Read,Glob,Grep` + `permission: default` (see Step 6). The judge must never edit the work it evaluates.
 - **Input:** the acceptance criteria from Step 0.5 + a pointer to the implementation/diff (not the whole diff pasted in — point at it).
-- **Verdict protocol** — the judge returns exactly one:
-  - `TRUE` — all acceptance criteria met, task complete
-  - `PARTIAL` — some criteria met, work remains (judge lists exactly what)
-  - `FALSE` — core criteria not met (judge says why)
+- **Verdict protocol** — the judge ends its report with EXACTLY one line of the form `JUDGE_VERDICT: <state>` (this exact prefix is what the `/orchestration` endpoint greps for):
+  - `JUDGE_VERDICT: TRUE` — all acceptance criteria met, task complete
+  - `JUDGE_VERDICT: PARTIAL | <what's still missing>` — some criteria met, work remains
+  - `JUDGE_VERDICT: FALSE | <which core criterion failed>` — core criteria not met
 
 Judge writes its detailed findings to `runs/task-N-judge-<round>-<stamp>.md` and returns only the verdict + 1-2 sentence summary. See **Step 7.5** for the judge brief template.
 

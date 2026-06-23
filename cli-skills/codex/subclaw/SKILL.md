@@ -122,3 +122,15 @@ tools: Read,Glob,Grep
 Known tool names: `Read Glob Grep Bash Edit Write NotebookEdit`. Unknown names are ignored with a warning. `permission:` is also parsed for parity with the Claude runner but does not change Codex sandbox behavior (Codex sandbox is binary). The frontmatter block is stripped from the brief before the worker sees it.
 
 **Judges** (Step 7.5 in the Claude skill) should always carry `tools: Read,Glob,Grep` so they stay read-only on Codex too.
+
+### Independent judge gate (optional, for non-trivial tasks)
+
+For tasks that need a hard stop-condition (not just "Codex eyeballs it"), mirror the Claude skill's judge gate: after Round A/B peer review, dispatch a judge worker (smart tier, `tools: Read,Glob,Grep` → Codex `--sandbox read-only`) that reads the implementation against acceptance criteria written up front, and ends its report with exactly one line:
+
+```
+JUDGE_VERDICT: TRUE   |  (all criteria met)
+JUDGE_VERDICT: PARTIAL |  <what's still missing>
+JUDGE_VERDICT: FALSE  |  <which core criterion failed>
+```
+
+The `JUDGE_VERDICT:` prefix is what the proxy's `/orchestration` endpoint greps for. Cap judge rounds at 3 (`ORCH_JUDGE_CAP`, default 3); if still PARTIAL/FALSE after 3 rounds, escalate to the human rather than loop. This prevents Codex from being the sole decider of "done".

@@ -1422,14 +1422,15 @@ def _read_judge_verdicts(reports_dir: str) -> List[Dict[str, Any]]:
     return verdicts
 
 
-def _read_shared_mailbox(workdir_root: str) -> List[Dict[str, Any]]:
-    """List files in <workdir>/.ai_agents/shared/ if present. workdir_root is the
-    reports dir's parent's parent typically; we search upward for .ai_agents."""
+def _read_shared_mailbox(reports_dir: str, root_abs: str) -> List[Dict[str, Any]]:
+    """List files in <workdir>/.ai_agents/shared/ if present. Search upward from
+    reports_dir but never above root_abs (path-traversal guard on the upward walk)."""
     mailbox: List[Dict[str, Any]] = []
-    # reports dir is usually <workdir>/.ai_agents/reports or a claw-reports dir.
-    # Walk up a couple of levels looking for .ai_agents/shared.
-    candidate = workdir_root
+    root_abs = os.path.realpath(root_abs)
+    candidate = os.path.realpath(reports_dir)
     for _ in range(3):
+        if candidate != root_abs and not candidate.startswith(root_abs + os.sep):
+            break  # walked above the configured root — stop, do not read outside
         shared = os.path.join(candidate, ".ai_agents", "shared")
         if os.path.isdir(shared):
             try:
@@ -1456,7 +1457,10 @@ def orchestration_payload(reports_dir: str) -> Dict[str, Any]:
     pool = _latest_pool_status(reports_dir)
     workers = _read_worker_statuses(reports_dir)
     judges = _read_judge_verdicts(reports_dir)
-    mailbox = _read_shared_mailbox(reports_dir)
+    root_abs = os.path.realpath(
+        os.path.join(APP_DIR, ORCH_REPORTS_DIR) if not os.path.isabs(ORCH_REPORTS_DIR) else ORCH_REPORTS_DIR
+    )
+    mailbox = _read_shared_mailbox(reports_dir, root_abs)
     # Count distinct judge rounds (files with 'judge' and a round marker in name).
     judge_round = len({j["file"] for j in judges})
     return {
