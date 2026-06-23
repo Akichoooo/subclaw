@@ -1441,9 +1441,16 @@ def _read_judge_verdicts(reports_dir: str, root_abs: str = "") -> List[Dict[str,
                     text = fh.read()
             except OSError:
                 continue
-            m = _JUDGE_VERDICT_RE.search(text)
-            if not m:
+            # The judge brief requires 'End with EXACTLY one verdict line', so the
+            # authoritative verdict is the LAST JUDGE_VERDICT: in the transcript —
+            # not the first. A judge reasoning aloud may write 'JUDGE_VERDICT: FALSE
+            # if X...' while discussing, before concluding 'JUDGE_VERDICT: TRUE'.
+            # re.search would pick the discussion line; finditer + last picks the
+            # real conclusion.
+            matches = list(_JUDGE_VERDICT_RE.finditer(text))
+            if not matches:
                 continue
+            m = matches[-1]
             try:
                 mtime = os.path.getmtime(full)
             except OSError:
