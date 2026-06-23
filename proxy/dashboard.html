@@ -503,11 +503,25 @@ wire_api = "responses"</pre>
     async function refreshOrchestration() {
       try {
         const orch = await fetchJson("/orchestration");
+        const section = document.getElementById("orch-section");
         if (!orch.enabled) {
-          document.getElementById("orch-section").style.display = "none";
+          // Don't silently hide — show the block with the reason so the user
+          // knows the feature exists but isn't configured, vs. broken.
+          section.style.display = "";
+          section.querySelector(".section-head h2").textContent = "Orchestration (disabled)";
+          const reason = orch.message || "ORCH_REPORTS_DIR not configured or path outside root";
+          const hint = orch.reason === "not_configured"
+            ? "Set <code class=\"mono\">ORCH_REPORTS_DIR=&lt;abs-path-to-reports-dir&gt;</code> when starting the proxy."
+            : orch.reason === "dir_missing"
+            ? "ORCH_REPORTS_DIR points at a directory that does not exist — check the path."
+            : "Requested reports_dir is outside the configured root.";
+          section.querySelector(".body").innerHTML =
+            `<div class="empty">Orchestration observability is off.<br><span class="muted">${esc(reason)}</span><br><span class="muted">${hint}</span></div>`;
           return;
         }
-        document.getElementById("orch-section").style.display = "";
+        section.style.display = "";
+        // Restore default heading/body in case a prior disabled-state rewrote them
+        section.querySelector(".section-head h2").textContent = "Orchestration";
         const o = orch.orchestrator || {};
         setText("orch-model", o.model || "—");
         const round = orch.judge_round || 0;

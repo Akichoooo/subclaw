@@ -1576,10 +1576,31 @@ async def orchestration(reports_dir: str = ""):
     worker statuses, judge verdicts + round counter, shared mailbox. The proxy does
     not write any of these files — it only reads from a configured reports dir.
     Query param ?reports_dir=<abs> overrides ORCH_REPORTS_DIR but must stay inside it."""
-    root = _safe_reports_root(reports_dir)
-    if root is None:
-        return JSONResponse(content={"enabled": False, "reports_dir": None, "message": "ORCH_REPORTS_DIR not configured or path outside root"})
-    return JSONResponse(content=orchestration_payload(root))
+    # Distinguish the disabled reasons so the dashboard can tell the user *why*
+    # (not configured vs. configured-but-missing vs. path-traversal-rejected),
+    # instead of silently hiding the block.
+    if not ORCH_REPORTS_DIR:
+        return JSONResponse(content={
+            "enabled": False, "reports_dir": None,
+            "reason": "not_configured",
+            "message": "ORCH_REPORTS_DIR env var is not set. Set it to the absolute path of your orchestrator reports dir (the one holding pool_status.*.json) to enable orchestration observability.",
+        })
+    root = ORCH_REPORTS_DIR
+    root_abs = os.path.realpath(os.path.join(APP_DIR, root)) if not os.path.isabs(root) else os.path.realpath(root)
+    if not os.path.isdir(root_abs):
+        return JSONResponse(content={
+            "enabled": False, "reports_dir": root,
+            "reason": "dir_missing",
+            "message": f"ORCH_REPORTS_DIR is set to {root!r} (resolved to {root_abs}) but that directory does not exist. Create it, or point ORCH_REPORTS_DIR at the real reports dir.",
+        })
+    safe = _safe_reports_root(reports_dir)
+    if safe is None:
+        return JSONResponse(content={
+            "enabled": False, "reports_dir": root,
+            "reason": "outside_root",
+            "message": f"The requested reports_dir is outside the configured ORCH_REPORTS_DIR root ({root_abs}). Refused to read.",
+        })
+    return JSONResponse(content=orchestration_payload(safe))
 
 
 @app.get("/models")
