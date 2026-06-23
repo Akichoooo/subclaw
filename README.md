@@ -54,9 +54,10 @@ If you use **Claude Code, Codex CLI, Aider, or Cursor** for serious work, you ha
          You (Claude Code / Codex / Aider)  =  Team Lead / Supervisor
                           |
                           |  /subclaw "audit this repo"
+                          |  (Step 0.5: writes acceptance criteria up front)
                           v
-              run-claw-pool.sh   (fans N briefs to N workers, parallel)
-                          |
+              run-claw-pool.sh   (fans N briefs to N workers, parallel;
+                          |        per-brief tools:/permission: frontmatter)
                           v
               claw-proxy :4748   (owns key pool, pins one key/session,
                           |        translates protocol, fails over on 429)
@@ -65,7 +66,14 @@ If you use **Claude Code, Codex CLI, Aider, or Cursor** for serious work, you ha
               return CONCISE file:line evidence back to you
                           |
                           v
-              You synthesize + audit the N reports → final answer
+              You self-audit, then dispatch an INDEPENDENT JUDGE (smart, read-only)
+              that returns JUDGE_VERDICT: TRUE|PARTIAL|FALSE against the criteria.
+              Judge loop capped at 3 rounds; past it, escalate to human —
+              you're no longer the sole decider of "done".
+                          |
+                          v
+              You synthesize + apply → final answer
+              (whole flow visible at GET /orchestration + dashboard "Orchestration" block)
 ```
 
 The killer detail: **`x-session-id` session affinity**. A worker that finishes a multi-turn task will keep hitting the same API key, so Anthropic's prompt cache stays warm. Other gateways do not do this.

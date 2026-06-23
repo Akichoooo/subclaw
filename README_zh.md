@@ -54,9 +54,10 @@
          你（Claude Code / Codex / Aider）  =  团队主管 / 调度者
                           |
                           |  /subclaw "审计这个仓库"
+                          |  （Step 0.5：先写下可核验的验收标准）
                           v
-              run-claw-pool.sh   （把任务拆成 N 份，并行下发给 N 个 worker）
-                          |
+              run-claw-pool.sh   （把任务拆成 N 份，并行下发给 N 个 worker；
+                          |        每个 brief 可用 tools:/permission: frontmatter 覆盖权限）
                           v
               claw-proxy :4748   （持有 Key 池，按 session 钉定 Key，
                           |        协议翻译，429 故障转移）
@@ -65,7 +66,14 @@
               把精简的 file:line 证据回传给你
                           |
                           v
-              你汇总并审计 N 份报告 → 最终结论
+              你先自审，再派一个独立 JUDGE（smart，只读）对照验收标准
+              返回 JUDGE_VERDICT: TRUE|PARTIAL|FALSE。
+              Judge 循环上限 3 轮；超过则上报人类——
+              你不再是“是否完成”的唯一裁决者。
+                          |
+                          v
+              你汇总并应用 → 最终结论
+              （整个流程在 GET /orchestration + dashboard “Orchestration” 区块可见）
 ```
 
 最关键的细节：**`x-session-id` 会话亲和性**。完成多轮任务的 worker 会一直命中同一把 API Key，让 Anthropic 的提示缓存保持温热。其他网关都没做这件事。

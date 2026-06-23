@@ -195,5 +195,6 @@ If your tool speaks either protocol, it can talk to subclaw. The proxy is just a
 - Routes to whatever's in `keys.json`
 - Pins sessions to keys (with the `x-session-id` header)
 - Tracks status through `/api/status` and `/stats`
+- Exposes orchestrator-layer state (subclaw/codex skill task tree, judge verdicts, shared mailbox) through `/orchestration` — read-only, requires `ORCH_REPORTS_DIR` to be set; visible on the dashboard's "Orchestration" block
 
 That's the entire surface. No special SDK, no lock-in.

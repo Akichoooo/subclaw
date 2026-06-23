@@ -3,7 +3,7 @@
 #
 # Common development tasks. Run `make help` for a list of targets.
 
-.PHONY: help install run test test-fast lint format clean docker docker-up docker-down docker-logs example-keys install-skill uninstall-skill
+.PHONY: help install run test test-fast lint format clean docker docker-up docker-down docker-logs example-keys install-skill uninstall-skill stats health orchestration dashboard
 
 PYTHON ?= python3
 PIP ?= pip3
@@ -78,6 +78,9 @@ stats:   ## Curl the proxy /stats endpoint.
 
 health:   ## Curl the proxy /health endpoint.
 	@curl -sS http://localhost:$(PORT)/health | $(PYTHON) -m json.tool
+
+orchestration:   ## Curl the proxy /orchestration endpoint (orchestrator task tree + judge gate; requires ORCH_REPORTS_DIR).
+	@curl -sS http://localhost:$(PORT)/orchestration | $(PYTHON) -m json.tool
 
 dashboard:   ## Open the dashboard in your default browser.
 	@command -v xdg-open >/dev/null 2>&1 && xdg-open http://localhost:$(PORT)/ui || open http://localhost:$(PORT)/ui

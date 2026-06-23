@@ -59,7 +59,8 @@ In a new terminal:
 ```bash
 # Health check
 curl http://localhost:4748/health
-# → {"status":"ok"}
+# → {"status":"ok","key_pool":2,"real_keys":2,"timestamp":...}
+# (status is "degraded" + HTTP 503 if no real keys are configured)
 
 # List discovered models
 curl http://localhost:4748/models | python -m json.tool
