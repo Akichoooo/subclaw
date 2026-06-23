@@ -1466,33 +1466,34 @@ def _read_judge_verdicts(reports_dir: str, root_abs: str = "") -> List[Dict[str,
 
 
 def _read_shared_mailbox(reports_dir: str, root_abs: str) -> List[Dict[str, Any]]:
-    """List files in <workdir>/.ai_agents/shared/ if present. Search upward from
-    reports_dir but never above root_abs (path-traversal guard on the upward walk)."""
+    """List files in <workdir>/.ai_agents/shared/.
+
+    The mailbox is a sibling of reports_dir under the same .ai_agents/ dir
+    (reports_dir = .ai_agents/reports, mailbox = .ai_agents/shared), so we
+    look at parent/shared directly — no upward walk needed. Bounded by root_abs
+    to avoid reading outside the configured root (same guard as judge search).
+    Returns [] if not found."""
     mailbox: List[Dict[str, Any]] = []
-    root_abs = os.path.realpath(root_abs)
-    candidate = os.path.realpath(reports_dir)
-    for _ in range(3):
-        if candidate != root_abs and not candidate.startswith(root_abs + os.sep):
-            break  # walked above the configured root — stop, do not read outside
-        shared = os.path.join(candidate, ".ai_agents", "shared")
-        if os.path.isdir(shared):
+    root_real = os.path.realpath(root_abs)
+    parent = os.path.dirname(os.path.realpath(reports_dir))
+    shared = os.path.join(parent, "shared")
+    shared_real = os.path.realpath(shared)
+    if root_real and not (shared_real == root_real or shared_real.startswith(root_real + os.sep)):
+        return mailbox
+    if not os.path.isdir(shared):
+        return mailbox
+    try:
+        for name in sorted(os.listdir(shared)):
+            full = os.path.join(shared, name)
+            if not os.path.isfile(full):
+                continue
             try:
-                for name in sorted(os.listdir(shared)):
-                    full = os.path.join(shared, name)
-                    if not os.path.isfile(full):
-                        continue
-                    try:
-                        st = os.stat(full)
-                    except OSError:
-                        continue
-                    mailbox.append({"name": name, "size": st.st_size, "modified": st.st_mtime})
+                st = os.stat(full)
             except OSError:
-                pass
-            break
-        parent = os.path.dirname(candidate)
-        if parent == candidate:
-            break
-        candidate = parent
+                continue
+            mailbox.append({"name": name, "size": st.st_size, "modified": st.st_mtime})
+    except OSError:
+        pass
     return mailbox
 
 
