@@ -63,6 +63,15 @@ This returns a human-readable list of models, their **Tier**, **Capacity (concur
 
 **This is the single most important step for not over-running.** Before dispatching any worker, extract explicit, checkable **acceptance criteria** from the user's goal. The whole point: the orchestrator must not be the sole judge of "done". An independent judge worker (Step 7.5) will later verify the work against these criteria — so write them as things a third party can check by reading code, not vibes.
 
+**First, ensure the orchestrator workspace exists.** Create (if missing) under the workdir:
+```
+.ai_agents/
+  shared/      # acceptance criteria + worker-to-worker findings mailbox
+  judges/      # judge transcripts (Step 7.5 writes JUDGE_VERDICT here)
+  reports/     # worker reports (run-claw-pool.sh also mkdir -p's this, but create it so the layout is explicit)
+```
+Don't rely on these being created as a side effect of a worker's first write — the proxy's `/orchestration` endpoint only searches dirs that exist, and a judge that can't write its verdict silently produces no `JUDGE_VERDICT:` line, so the dashboard shows an empty judge list even though the judge ran.
+
 **For every goal, write a one-block acceptance criteria list and store it.** Example:
 
 ```
