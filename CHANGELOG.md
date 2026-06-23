@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Independent judge gate: orchestrator writes acceptance criteria (Step 0.5) and dispatches a read-only smart-tier judge worker (Step 7.5) that returns TRUE/PARTIAL/FALSE, so the orchestrator is no longer the sole decider of "done". Review loop hard-capped at 3 rounds; escalates to the human past the cap.
+- Per-brief permission frontmatter: a brief may declare `tools:` and `permission:` in a YAML-ish frontmatter block to override the global `--tools`/`--perm`/`--bash`/`--write` for that one worker (e.g. pin a judge to `tools: Read,Glob,Grep`). Supported in both `run-claw-pool.sh` (Claude) and `run_codex_claw_pool.ps1` (Codex, mapped to `--sandbox`). Unknown tool names are dropped with a warning; the block is stripped before the worker sees the prompt.
+- `GET /orchestration` endpoint on the proxy: read-only view of orchestrator task tree, worker statuses, judge verdicts + round counter, and shared mailbox. Surfaced as an "Orchestration" block on the dashboard. Configured via `ORCH_REPORTS_DIR` (path-traversal guarded). Also surfaced in `codex_subclaw_status.ps1`.
 - Comprehensive README with AI-search-optimized keywords and FAQ
 - Chinese documentation (`README_zh.md`) with full feature parity
 - Architecture deep-dive in `docs/architecture.md`

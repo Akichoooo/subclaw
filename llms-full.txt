@@ -442,7 +442,7 @@ A: Yes. /v1/messages and /v1/chat/completions are exposed.
 3. Test generation — 30 test files in parallel, Opus spot-checks.
 4. Documentation sweep — 200 functions, ~$0.50 total.
 5. Security smell scan — 4 categories × 20 workers.
-6. Refactor planning — three-layer cross-review (Haiku draft, Sonnet audit, Opus finalize).
+6. Refactor planning — three-layer cross-review (Haiku draft, Sonnet audit, Opus finalize) with an independent judge gate and 3-round review cap.
 7. Cross-language port — three-layer pipeline per function.
 
 Anti-patterns: frontier reasoning, one-shot Q&A, tasks under 5k tokens, latency-critical paths.

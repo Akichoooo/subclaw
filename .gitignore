@@ -20,3 +20,5 @@ codex-claw-reports/
 
 # OS/editor
 .DS_Store
+# Windows reserved name from accidental `where`/redirect output
+nul

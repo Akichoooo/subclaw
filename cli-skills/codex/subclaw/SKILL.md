@@ -105,3 +105,20 @@ Watch mode:
 - Never print full API keys. Status output should show suffix only.
 - If proxy is down, start it from the repository root with `docker compose up -d`, or run `python proxy/app.py` after installing requirements.
 - Workers advise; Codex decides and applies final edits.
+
+### Per-brief permissions (frontmatter)
+
+A brief MAY declare `tools:` at the top in a YAML-ish frontmatter block. The Codex runner maps this to the `--sandbox` flag (Codex has no per-tool allowlist like Claude's `--allowedTools`):
+
+```markdown
+---
+tools: Read,Glob,Grep
+---
+```
+
+- If `tools` contains `Bash`, `Edit`, `Write`, or `NotebookEdit` → runner uses `--sandbox workspace-write`.
+- Otherwise (or no frontmatter) → `--sandbox read-only` (the safe default).
+
+Known tool names: `Read Glob Grep Bash Edit Write NotebookEdit`. Unknown names are ignored with a warning. `permission:` is also parsed for parity with the Claude runner but does not change Codex sandbox behavior (Codex sandbox is binary). The frontmatter block is stripped from the brief before the worker sees it.
+
+**Judges** (Step 7.5 in the Claude skill) should always carry `tools: Read,Glob,Grep` so they stay read-only on Codex too.

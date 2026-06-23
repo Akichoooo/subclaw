@@ -29,6 +29,13 @@ RETRY_MAX_ATTEMPTS = int(os.getenv("RETRY_MAX_ATTEMPTS", "3"))
 RETRY_BASE_DELAY = float(os.getenv("RETRY_BASE_DELAY", "0.5"))
 CLAUDE_TOKEN_MULTIPLIER = float(os.getenv("CLAUDE_TOKEN_MULTIPLIER", "1.15"))
 
+# Orchestration-layer observability. The proxy does NOT write these files; it only
+# reads them (best-effort) when an orchestrator (subclaw / codex skill) points at a
+# reports dir. Configured via ORCH_REPORTS_DIR (absolute path). If unset, the
+# /orchestration endpoint reports disabled and the dashboard hides the block.
+ORCH_REPORTS_DIR = os.getenv("ORCH_REPORTS_DIR", "").strip()
+ORCH_JUDGE_CAP = int(os.getenv("ORCH_JUDGE_CAP", "3"))
+
 FALLBACK_KEYS = [
     {
         "key": "sk-placeholder-not-configured",
@@ -1303,6 +1310,9 @@ def status_payload() -> Dict[str, Any]:
             },
             "recent_routes": list(RECENT_ROUTES),
             "active_subclaws": [r for r in list(RECENT_ROUTES)[:20] if r.get("session_id")],
+            "orchestration_enabled": bool(ORCH_REPORTS_DIR) and os.path.isdir(
+                os.path.join(APP_DIR, ORCH_REPORTS_DIR) if not os.path.isabs(ORCH_REPORTS_DIR) else ORCH_REPORTS_DIR
+            ),
         }
     )
     return payload
@@ -1310,6 +1320,155 @@ def status_payload() -> Dict[str, Any]:
 
 async def health_upstream() -> bool:
     return any(is_real_key(entry.get("key", "")) for entry in CLAW_KEYS)
+
+
+# ---------- Orchestration-layer observability (read-only) ----------
+
+_JUDGE_VERDICT_RE = re.compile(r"JUDGE_VERDICT:\s*(TRUE|PARTIAL|FALSE)", re.IGNORECASE)
+
+
+def _safe_reports_root(requested: str) -> Optional[str]:
+    """Resolve a requested reports dir to an absolute path inside the configured
+    ORCH_REPORTS_DIR root. Returns None if unconfigured, missing, or outside the root
+    (path-traversal guard). The root itself may be relative — resolved against APP_DIR."""
+    root = ORCH_REPORTS_DIR
+    if not root:
+        return None
+    root_abs = os.path.realpath(os.path.join(APP_DIR, root)) if not os.path.isabs(root) else os.path.realpath(root)
+    if not os.path.isdir(root_abs):
+        return None
+    target = requested or root_abs
+    target_abs = os.path.realpath(target)
+    if not (target_abs == root_abs or target_abs.startswith(root_abs + os.sep)):
+        return None
+    return target_abs if os.path.isdir(target_abs) else None
+
+
+def _read_json_safe(path: str) -> Dict[str, Any]:
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def _latest_pool_status(reports_dir: str) -> Dict[str, Any]:
+    best: Optional[Tuple[float, str]] = None
+    try:
+        for name in os.listdir(reports_dir):
+            if not name.startswith("pool_status.") or not name.endswith(".json"):
+                continue
+            full = os.path.join(reports_dir, name)
+            try:
+                mtime = os.path.getmtime(full)
+            except OSError:
+                continue
+            if best is None or mtime > best[0]:
+                best = (mtime, full)
+    except OSError:
+        pass
+    return _read_json_safe(best[1]) if best else {}
+
+
+def _read_worker_statuses(reports_dir: str) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    try:
+        names = sorted(n for n in os.listdir(reports_dir) if n.startswith("worker_") and n.endswith(".status.json"))
+    except OSError:
+        return out
+    for name in names:
+        data = _read_json_safe(os.path.join(reports_dir, name))
+        if data:
+            out.append(data)
+    return out
+
+
+def _read_judge_verdicts(reports_dir: str) -> List[Dict[str, Any]]:
+    """Scan reports_dir (and a sibling runs/ dir) for judge transcripts and extract the
+    latest verdict per task. Returns a list sorted by mtime."""
+    verdicts: List[Dict[str, Any]] = []
+    search_dirs = [reports_dir]
+    runs_dir = os.path.join(os.path.dirname(reports_dir), "runs")
+    if os.path.isdir(runs_dir):
+        search_dirs.append(runs_dir)
+    for d in search_dirs:
+        try:
+            names = os.listdir(d)
+        except OSError:
+            continue
+        for name in names:
+            if "judge" not in name.lower() or not name.endswith(".md"):
+                continue
+            full = os.path.join(d, name)
+            try:
+                with open(full, "r", encoding="utf-8", errors="replace") as fh:
+                    text = fh.read()
+            except OSError:
+                continue
+            m = _JUDGE_VERDICT_RE.search(text)
+            if not m:
+                continue
+            try:
+                mtime = os.path.getmtime(full)
+            except OSError:
+                mtime = 0.0
+            verdicts.append({
+                "file": name,
+                "verdict": m.group(1).upper(),
+                "mtime": mtime,
+                "path": full,
+            })
+    verdicts.sort(key=lambda v: v["mtime"], reverse=True)
+    return verdicts
+
+
+def _read_shared_mailbox(workdir_root: str) -> List[Dict[str, Any]]:
+    """List files in <workdir>/.ai_agents/shared/ if present. workdir_root is the
+    reports dir's parent's parent typically; we search upward for .ai_agents."""
+    mailbox: List[Dict[str, Any]] = []
+    # reports dir is usually <workdir>/.ai_agents/reports or a claw-reports dir.
+    # Walk up a couple of levels looking for .ai_agents/shared.
+    candidate = workdir_root
+    for _ in range(3):
+        shared = os.path.join(candidate, ".ai_agents", "shared")
+        if os.path.isdir(shared):
+            try:
+                for name in sorted(os.listdir(shared)):
+                    full = os.path.join(shared, name)
+                    if not os.path.isfile(full):
+                        continue
+                    try:
+                        st = os.stat(full)
+                    except OSError:
+                        continue
+                    mailbox.append({"name": name, "size": st.st_size, "modified": st.st_mtime})
+            except OSError:
+                pass
+            break
+        parent = os.path.dirname(candidate)
+        if parent == candidate:
+            break
+        candidate = parent
+    return mailbox
+
+
+def orchestration_payload(reports_dir: str) -> Dict[str, Any]:
+    pool = _latest_pool_status(reports_dir)
+    workers = _read_worker_statuses(reports_dir)
+    judges = _read_judge_verdicts(reports_dir)
+    mailbox = _read_shared_mailbox(reports_dir)
+    # Count distinct judge rounds (files with 'judge' and a round marker in name).
+    judge_round = len({j["file"] for j in judges})
+    return {
+        "enabled": True,
+        "reports_dir": reports_dir,
+        "orchestrator": pool.get("orchestrator", {}),
+        "workers": workers,
+        "judge_verdicts": judges[:10],
+        "judge_round": judge_round,
+        "judge_cap": ORCH_JUDGE_CAP,
+        "shared_mailbox": mailbox[:50],
+    }
 
 
 @asynccontextmanager
@@ -1346,6 +1505,18 @@ async def ui():
 @app.get("/api/status")
 async def api_status():
     return JSONResponse(content=status_payload())
+
+
+@app.get("/orchestration")
+async def orchestration(reports_dir: str = ""):
+    """Read-only view of orchestrator (subclaw / codex skill) state: pool status,
+    worker statuses, judge verdicts + round counter, shared mailbox. The proxy does
+    not write any of these files — it only reads from a configured reports dir.
+    Query param ?reports_dir=<abs> overrides ORCH_REPORTS_DIR but must stay inside it."""
+    root = _safe_reports_root(reports_dir)
+    if root is None:
+        return JSONResponse(content={"enabled": False, "reports_dir": None, "message": "ORCH_REPORTS_DIR not configured or path outside root"})
+    return JSONResponse(content=orchestration_payload(root))
 
 
 @app.get("/models")

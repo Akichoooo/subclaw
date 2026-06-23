@@ -65,6 +65,49 @@ function Read-WorkerMarkers($Path) {
   return $result
 }
 
+# Parse optional YAML-ish frontmatter (--- ... ---) at the top of a brief file.
+# Returns @{ tools = @(...); permission = "..."; body = "..." } (body = file content minus frontmatter).
+# Codex maps to sandbox: if tools contain Bash/Edit/Write => workspace-write, else read-only.
+# Known tools: Read Glob Grep Bash Edit Write NotebookEdit (others ignored with a warning).
+function Parse-BriefFrontmatter($Path) {
+  $result = @{ tools = @(); permission = ""; body = "" }
+  if (-not (Test-Path -LiteralPath $Path)) { return $result }
+  $lines = Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue
+  if (-not $lines) { return $result }
+  if ($lines[0].Trim() -ne "---") { $result.body = ($lines -join "`n"); return $result }
+  $known = @("Read","Glob","Grep","Bash","Edit","Write","NotebookEdit")
+  $validPerm = @("default","acceptEdits","bypassPermissions")
+  $bodyStart = 0
+  for ($i = 1; $i -lt $lines.Count; $i++) {
+    $line = $lines[$i].Trim()
+    if ($line -eq "---") { $bodyStart = $i + 1; break }
+    if ($line -match '^tools:\s*(.*)$') {
+      $raw = $Matches[1]
+      foreach ($tok in ($raw -split '[, ]+' | Where-Object { $_ })) {
+        if ($known -contains $tok) { $result.tools += $tok }
+        else { Write-Output "frontmatter: ignoring unknown tool '$tok' in $Path" }
+      }
+    }
+    elseif ($line -match '^permission:\s*(\S+)') {
+      $p = $Matches[1]
+      if ($validPerm -contains $p) { $result.permission = $p }
+      else { Write-Output "frontmatter: ignoring invalid permission '$p' in $Path" }
+    }
+  }
+  if ($bodyStart -gt 0 -and $bodyStart -lt $lines.Count) {
+    $result.body = ($lines[$bodyStart..($lines.Count-1)] -join "`n")
+  }
+  return $result
+}
+
+# Map parsed frontmatter tools to a codex --sandbox value.
+# Bash/Edit/Write/NotebookEdit require workspace-write; otherwise read-only.
+function Resolve-Sandbox($Parsed) {
+  $writeTools = @("Bash","Edit","Write","NotebookEdit")
+  foreach ($t in $Parsed.tools) { if ($writeTools -contains $t) { return "workspace-write" } }
+  return "read-only"
+}
+
 if (-not (Test-Path -LiteralPath $Workdir)) { throw "Workdir not found: $Workdir" }
 if ($BriefDir) {
   if (-not (Test-Path -LiteralPath $BriefDir)) { throw "BriefDir not found: $BriefDir" }
@@ -113,7 +156,9 @@ while ($queue.Count -gt 0 -or $running.Count -gt 0) {
     $report = Join-Path $OutDir "$base.codexclaw.$Stamp.md"
     $statusPath = Join-Path $OutDir ("worker_{0:000}.status.json" -f $idx)
     $sid = "codex-pool-$Stamp-$base-w$idx"
-    $prompt = Get-Content -LiteralPath $taskPath -Raw
+    $parsed = Parse-BriefFrontmatter $taskPath
+    $sandbox = Resolve-Sandbox $parsed
+    $prompt = $parsed.body
     $workerPrompt = @"
 You are a Codex subclaw worker. Follow the brief exactly.
 
@@ -130,7 +175,7 @@ Return a concise evidence packet, not a transcript.
 $prompt
 "@
     Write-JsonFile $statusPath @{ model=$Model; msg="$base starting"; running=$true; status="RUNNING"; elapsed=0 }
-    Set-Content -LiteralPath $report -Encoding UTF8 -Value "[META]`ntask: $taskPath`nmodel: $Model`nengine: codex-cli`nendpoint: $ProxyUrl/v1`nsession: $sid`nstarted: $(Get-Date -Format o)`n[/META]`n`n[OUTPUT]"
+    Set-Content -LiteralPath $report -Encoding UTF8 -Value "[META]`ntask: $taskPath`nmodel: $Model`nengine: codex-cli`nendpoint: $ProxyUrl/v1`nsession: $sid`nsandbox: $sandbox`nstarted: $(Get-Date -Format o)`n[/META]`n`n[OUTPUT]"
 
     $promptFile = "$report.prompt"
     Set-Content -LiteralPath $promptFile -Encoding UTF8 -Value $workerPrompt
@@ -139,7 +184,7 @@ $prompt
       "-m", $Model,
       "--cd", $Workdir,
       "--skip-git-repo-check",
-      "--sandbox", "read-only",
+      "--sandbox", $sandbox,
       "-c", 'model_provider="claw"',
       "-c", 'model_providers.claw.name="claw"',
       "-c", ('model_providers.claw.base_url="{0}/v1"' -f $ProxyUrl.TrimEnd('/')),

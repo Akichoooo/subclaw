@@ -59,6 +59,30 @@ This returns a human-readable list of models, their **Tier**, **Capacity (concur
 
 ---
 
+## Step 0.5 - Set acceptance criteria + judge gate (stop-condition contract)
+
+**This is the single most important step for not over-running.** Before dispatching any worker, extract explicit, checkable **acceptance criteria** from the user's goal. The whole point: the orchestrator must not be the sole judge of "done". An independent judge worker (Step 7.5) will later verify the work against these criteria — so write them as things a third party can check by reading code, not vibes.
+
+**For every goal, write a one-block acceptance criteria list and store it.** Example:
+
+```
+Acceptance criteria (for "audit repo for hardcoded secrets"):
+  1. Every file under src/ is scanned (cite any skipped + why)
+  2. Each finding cites file:line and the secret type
+  3. No false positives on test fixtures / .example files
+  4. Findings tagged [safe]/[needs-confirmation]/[do-not-delete]
+  5. Output is a findings_list return_format, <= 1 line per finding
+```
+
+Rules:
+- **Concrete and checkable.** "code is clean" is not a criterion. "no function > 50 lines in the diff" is.
+- **Stored, not just in your head.** Write it to `.ai_agents/shared/acceptance-<goal-slug>.md` so the judge worker can read it, and so it survives your context compaction.
+- **Cap review rounds at 3.** The judge loop (Step 7c) is hard-capped: judge returns PARTIAL/FALSE → implementer fixes → judge re-reviews, max 3 rounds. Beyond that, escalate to the human rather than loop forever. This is the guard against "swarm runs until timeout and only the orchestrator knows it stopped."
+
+If you cannot write 3+ checkable criteria, the goal is too vague for subclaw — ask the user to sharpen it, or do it yourself in Claude.
+
+---
+
 ## Step 0 - Pick the model tier by task difficulty (step-level routing)
 
 This is where the savings come from: **route each step to the cheapest model that can do it.** Don't send a classification job to your most expensive worker, and don't send an architecture audit to your cheapest.
@@ -184,8 +208,32 @@ Each worker gets a **fresh, isolated context** - no shared session memory. Give 
 3. **State the negative space.** Tell it what to ignore (`node_modules`, `.next`, `.venv`, build artifacts, vendored code).
 4. **Carry forward prior report paths.** Continuing earlier work? Write `Prior report: <path>` - don't paraphrase.
 
+### Per-brief permissions (optional frontmatter)
+
+A brief MAY declare its own tools/permissions at the top, overriding the global `--tools`/`--perm`/`--bash`/`--write` for that one worker only. This lets you mix read-only drafters with a write-capable applier in the same pool, or pin a judge to strict read-only.
+
+```markdown
+---
+tools: Read,Glob,Grep
+permission: default
+---
+# brief body...
+```
+
+- `tools`: comma list, subset of `Read,Glob,Grep,Bash,Edit,Write,NotebookEdit`. Unknown names are dropped (warned to stderr). Empty/absent => use the global flag value.
+- `permission`: one of `default`, `acceptEdits`, `bypassPermissions`. Empty/absent => global.
+
+**Judges should always carry `tools: Read,Glob,Grep` + `permission: default`** — a judge that can edit the work it is evaluating is not independent. See Step 7.5.
+
+The runner strips the frontmatter block before sending the brief body to the worker, so the worker never sees the YAML as content.
+
 ### Brief skeleton
 ```markdown
+---
+tools: <optional: subset of Read,Glob,Grep,Bash,Edit,Write,NotebookEdit>
+permission: <optional: default | acceptEdits | bypassPermissions>
+---
+
 # <Title>
 
 ## Goal
@@ -270,25 +318,101 @@ Show the user the **brief path** in your reply, not the brief content.
 
 ## Step 7 - Audit the workers' output (quality gate - Claude value-add)
 
+The audit is now **three stages**, in order. Do not skip stages and do not start the judge (7b) before the self-audit (7a).
+
+### 7a - Self-audit (fast, Claude-side)
+
 Read only the `[OUTPUT]` body of each report. Apply this checklist:
 
-### Mandatory checks (all must pass)
+**Mandatory checks (all must pass)**
 1. **Format compliance** - output matches the `return_format` you asked for?
 2. **Path reality** - spot-check 2-3 cited paths with Glob. Cited path doesn't exist -> red flag.
 3. **Symbol reality** - Grep one or two cited function/class names. Hallucinated symbol -> red flag.
 4. **Scope compliance** - all cited paths inside `WorkingDir`? Outside -> critical.
 5. **No silent skips** - a focus glob named but never appearing -> flag it.
 
-### Where MoA / cross-review pays off
-When you ran multiple workers on overlapping ground: **where they agree, trust it - don't re-audit.** Where they **disagree** is exactly where you spend your verification budget. That's the whole point of model diversity: cheap workers surface the candidates, you adjudicate only the contested ones.
+**Severity**
+- **0 red flags** -> proceed to 7b (judge).
+- **1 red flag** -> fix-in-place: re-Grep/re-Read just the suspicious item, then 7b.
+- **>=2 red flags** -> rerun with a tighter brief (narrower scope, more anchors). Skip the judge this round — the work isn't ready to be judged.
 
-### Severity
-- **0 red flags** -> trust it.
-- **1 red flag** -> fix-in-place: re-Grep/re-Read just the suspicious item.
-- **>=2 red flags** -> rerun with a tighter brief (narrower scope, more anchors), or escalate to Claude (do it directly).
+**Hard rule:** If you re-read more than 2 source files Claude-side in this stage, **stop**: the brief was too vague (rerun tighter) or the task wasn't right for subclaw. Don't burn savings re-validating.
+
+### 7b - Independent judge (the stop-condition gate)
+
+Dispatch a **judge worker** — a fresh, isolated-context third party that did NOT write the code and did NOT do the 7a audit. This is the answer to "don't let the orchestrator be the only one who decides when it's done."
+
+- **Model:** smart tier (the strongest routable worker). Weakest model here defeats the purpose.
+- **Permissions:** READ-ONLY. Use the per-brief frontmatter `tools: Read,Glob,Grep` + `permission: default` (see Step 6). The judge must never edit the work it evaluates.
+- **Input:** the acceptance criteria from Step 0.5 + a pointer to the implementation/diff (not the whole diff pasted in — point at it).
+- **Verdict protocol** — the judge returns exactly one:
+  - `TRUE` — all acceptance criteria met, task complete
+  - `PARTIAL` — some criteria met, work remains (judge lists exactly what)
+  - `FALSE` — core criteria not met (judge says why)
+
+Judge writes its detailed findings to `runs/task-N-judge-<round>-<stamp>.md` and returns only the verdict + 1-2 sentence summary. See **Step 7.5** for the judge brief template.
+
+### 7c - Review loop (capped at 3 rounds)
+
+If the judge returns `TRUE`: accept the task, proceed to Step 8.
+
+If the judge returns `PARTIAL` or `FALSE`:
+1. Re-dispatch the **implementer worker** (same brief + the judge's specific gaps appended).
+2. Re-run 7a self-audit on the new output.
+3. Re-dispatch the judge (round 2). Repeat.
+4. **Hard cap: 3 judge rounds.** If after 3 rounds the judge still returns PARTIAL/FALSE, **escalate to the human** — show them: the acceptance criteria, what's still missing (from the judge's last verdict), and ask whether to relax the criteria, re-scope, or abandon. Do not silently loop past 3, and do not silently accept a PARTIAL as done.
+
+### Where MoA / cross-review pays off
+When you ran multiple workers on overlapping ground: **where they agree, trust it - don't re-audit.** Where they **disagree** is exactly where you spend your verification budget. That's the whole point of model diversity: cheap workers surface the candidates, the judge adjudicates only the contested ones.
 
 ### Hard rule
 If you re-read more than 2 source files Claude-side to verify a worker, **stop**: the brief was too vague (rerun tighter) or the task wasn't right for subclaw. Don't burn the savings re-validating.
+
+---
+
+## Step 7.5 - Independent judge dispatch (brief template)
+
+The judge is just a worker with a special brief and READ-ONLY permissions. Dispatch it through the same `run-claw-pool.sh`, with `-m <smart-model-id>` and a brief built from this template:
+
+```markdown
+---
+tools: Read,Glob,Grep
+permission: default
+---
+
+# Judge: <goal slug>, round <N>
+
+## Role
+You are an INDEPENDENT JUDGE. You did not write this code and you did not review
+it before. You are an impartial third party. Your only job: decide if the work
+meets its acceptance criteria. DO NOT MODIFY ANY FILES — you are read-only.
+
+## Acceptance criteria
+[Paste the criteria from .ai_agents/shared/acceptance-<slug>.md — verbatim]
+
+## What was implemented
+[One-paragraph summary + pointer to the report/diff. Do NOT paste the whole diff;
+ point at the file path and let the judge Read it at its cheap input rate.]
+
+## Model tier
+smart
+
+## Your job
+1. Do not assume the work is done because the implementer says it is.
+2. Check the implementation against EACH acceptance criterion specifically.
+3. Read the actual code (via Read/Glob/Grep) — do not trust the summary.
+4. Look for gaps, edge cases missed, or "optimistic" claims not backed by code.
+
+## Output contract
+- return_format: boolean (with evidence)
+- Write detailed findings to runs/task-N-judge-<round>-<stamp>.md
+- End with EXACTLY one verdict line:
+  JUDGE_VERDICT: TRUE   |  (all criteria met)
+  JUDGE_VERDICT: PARTIAL |  <one line: what's still missing>
+  JUDGE_VERDICT: FALSE  |  <one line: which core criterion failed>
+```
+
+Dispatch with a generous timeout (judges read more than drafters): `-T 1200`.
 
 ---
 
@@ -329,6 +453,8 @@ If user says "apply" / "patch it" / "go": **Claude (not the worker) makes the ed
 | Worker dumped whole file as result | missing `return_format` | pin `concise_summary`, rerun |
 | All workers agree but wrong | over-trusted agreement on a vague brief | the agreement was on the wrong frame - re-anchor and rerun |
 | Model not found | stale model id | re-read `/models`; never hardcode |
+| Judge keeps returning PARTIAL | acceptance criteria too strict, or work genuinely incomplete | hard cap at 3 judge rounds (Step 7c); beyond that escalate to human with the criteria + last gap list |
+| No acceptance criteria set | you skipped Step 0.5 | go back, write 3+ checkable criteria to `.ai_agents/shared/acceptance-<slug>.md` before dispatching the judge |
 
 ---
 

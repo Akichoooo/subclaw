@@ -64,7 +64,7 @@ Skip generated files and node_modules.
 Save each test to tests/payments/<func_name>.test.ts
 ```
 
-**Architecture**: planner-generator-evaluator, or just orchestrator-workers with `--write` permissions.
+**Architecture**: planner-generator-evaluator, or just orchestrator-workers with `--write` permissions (or per-brief `tools:` frontmatter — see Step 6 in the skill).
 
 **Why subclaw helps**:
 - Test generation is a "draft, then refine" task. Cheap model drafts, Opus reviews.
@@ -86,7 +86,7 @@ add a JSDoc comment. Include @param, @returns, and a one-line summary
 of the function's purpose based on its body.
 ```
 
-**Architecture**: orchestrator-workers with `--write` permissions.
+**Architecture**: orchestrator-workers with `--write` permissions (or per-brief `tools:` frontmatter for finer control).
 
 **Why subclaw helps**:
 - Docstring generation is mechanical; Haiku handles it well.

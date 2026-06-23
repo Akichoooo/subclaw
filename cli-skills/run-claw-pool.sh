@@ -101,6 +101,47 @@ for m in d.get("data") or []:
     ))'
 }
 
+# Parse optional YAML-ish frontmatter (--- ... ---) at the top of a brief file.
+# Emits two lines: "<tools_value>" and "<permission_value>" (empty if unset/invalid).
+# Only known tool names are kept; unknown names are dropped with a warning to stderr.
+# tools may be comma- OR space-separated; permission is a single token.
+# tools/permission values from frontmatter OVERRIDE the global --tools/--perm/--bash/--write
+# for this one task only. No frontmatter => empty => global defaults apply.
+KNOWN_TOOLS="Read Glob Grep Bash Edit Write NotebookEdit"
+VALID_PERM="default acceptEdits bypassPermissions"
+# trim leading/trailing whitespace from $1
+_trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
+parse_brief_frontmatter() {
+  local f="$1"
+  local in_fm=0 tools_out="" perm_out=""
+  # Only treat as frontmatter if it is the very first line of the file.
+  local first
+  first="$(head -n1 "$f" 2>/dev/null)"
+  [ "$first" = "---" ] || { echo ""; echo ""; return 0; }
+  while IFS= read -r line; do
+    [ "$line" = "---" ] && { in_fm=$((in_fm+1)); [ "$in_fm" -ge 2 ] && break; continue; }
+    [ "$line" = "---" ] && continue
+    case "$line" in
+      tools:*)
+        raw="$(_trim "${line#tools:}")"
+        # accept both "Read,Glob,Grep" and "Read Glob Grep"
+        tok_list="${raw//,/ }"
+        cleaned=""
+        for tok in $tok_list; do
+          case " $KNOWN_TOOLS " in *" $tok "*) cleaned="${cleaned:+$cleaned,}$tok";; *) echo "frontmatter: ignoring unknown tool '$tok' in $f" >&2;; esac
+        done
+        tools_out="$cleaned"
+        ;;
+      permission:*)
+        raw="$(_trim "${line#permission:}")"
+        case " $VALID_PERM " in *" $raw "*) perm_out="$raw";; *) echo "frontmatter: ignoring invalid permission '$raw' in $f" >&2;; esac
+        ;;
+    esac
+  done < "$f"
+  echo "$tools_out"
+  echo "$perm_out"
+}
+
 while [ $# -gt 0 ]; do
   case "$1" in
     -j) JOBS="$2"; shift 2;;
@@ -388,6 +429,20 @@ PY
     start_progress_monitor
     local prompt
     prompt="$(cat "$task")"
+    # Per-brief frontmatter override (--- tools: ... / permission: ... ---).
+    # Falls back to the global $TOOLS / $PERMMODE when absent or empty.
+    local task_tools="$TOOLS" task_perm="$PERMMODE"
+    local fm_tools fm_perm
+    { read -r fm_tools; read -r fm_perm; } < <(parse_brief_frontmatter "$task")
+    [ -n "$fm_tools" ] && task_tools="$fm_tools"
+    [ -n "$fm_perm" ] && task_perm="$fm_perm"
+    [ "$task_tools" != "$TOOLS" ] || [ "$task_perm" != "$PERMMODE" ] && \
+      echo "[META] per-brief override: tools=$task_tools perm=$task_perm (global: tools=$TOOLS perm=$PERMMODE)" >> "$report"
+    # If frontmatter was present, strip it from the prompt sent to the worker
+    # so the worker doesn't see the YAML block as content.
+    if [ "$(head -n1 "$task")" = "---" ]; then
+      prompt="$(awk 'BEGIN{f=0} /^---$/{f++; next} f>=2{print}' "$task")"
+    fi
     (
       cd "$WORKDIR" &&
         CLAUDE_CONFIG_DIR="$cfg" \
@@ -403,8 +458,8 @@ PY
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
         "$TIMEOUT_CMD" "${TIMEOUT_EXTRA_ARGS[@]}" "$TIMEOUT" claude -p "$prompt" \
           --add-dir "$WORKDIR" \
-          --allowedTools "$TOOLS" \
-          --permission-mode "$PERMMODE"
+          --allowedTools "$task_tools" \
+          --permission-mode "$task_perm"
     ) >> "$report" 2>&1
 
     ec=$?

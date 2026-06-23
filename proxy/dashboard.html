@@ -362,9 +362,27 @@ wire_api = "responses"</pre>
         <div class="body" id="sessions-table"></div>
       </section>
 
-      <section class="span-12">
+      <section class="span-12" id="orch-section" style="display:none">
         <div class="section-head">
-          <h2>Compat Counters</h2>
+          <h2>Orchestration</h2>
+          <span class="muted">subclaw / codex skill task tree + judge gate</span>
+        </div>
+        <div class="body">
+          <div class="metric-row" style="margin-bottom:12px">
+            <div class="metric"><div class="label">Orchestrator</div><div class="value" id="orch-model" style="font-size:16px">—</div></div>
+            <div class="metric"><div class="label">Judge round</div><div class="value" id="orch-round" style="font-size:16px">— / —</div></div>
+            <div class="metric"><div class="label">Workers</div><div class="value" id="orch-workers-count" style="font-size:16px">0</div></div>
+            <div class="metric"><div class="label">Shared mailbox</div><div class="value" id="orch-mailbox-count" style="font-size:16px">0</div></div>
+          </div>
+          <div id="orch-workers-table"></div>
+          <h2 style="margin-top:14px">Judge verdicts</h2>
+          <div id="orch-judges-table"></div>
+          <h2 style="margin-top:14px">Shared mailbox</h2>
+          <div id="orch-mailbox-table"></div>
+        </div>
+      </section>
+
+      <section class="span-12">
           <span class="muted">proxy-side repairs and upstream health</span>
         </div>
         <div class="body two-col">
@@ -473,14 +491,75 @@ wire_api = "responses"</pre>
           cost_saved_cny: status.cost_saved_cny,
           keys_config: status.keys_config
         }, null, 2);
+        // Toggle orchestration block visibility based on proxy config.
+        const orchEnabled = !!status.orchestration_enabled;
+        document.getElementById("orch-section").style.display = orchEnabled ? "" : "none";
       } catch (err) {
         document.getElementById("health-dot").className = "dot bad";
         setText("health-text", err.message);
         setText("updated-at", `Last error ${new Date().toLocaleTimeString()}`);
       }
     }
+    async function refreshOrchestration() {
+      try {
+        const orch = await fetchJson("/orchestration");
+        if (!orch.enabled) {
+          document.getElementById("orch-section").style.display = "none";
+          return;
+        }
+        document.getElementById("orch-section").style.display = "";
+        const o = orch.orchestrator || {};
+        setText("orch-model", o.model || "—");
+        const round = orch.judge_round || 0;
+        const cap = orch.judge_cap || 3;
+        const roundEl = document.getElementById("orch-round");
+        roundEl.textContent = `${round} / ${cap}`;
+        roundEl.className = round >= cap ? "value bad" : "value";
+        const workers = orch.workers || [];
+        setText("orch-workers-count", workers.length);
+        const mailbox = orch.shared_mailbox || [];
+        setText("orch-mailbox-count", mailbox.length);
+
+        const statusTag = (s) => {
+          const v = String(s || "").toUpperCase();
+          if (v === "OK" || v === "true") return `<span class="tag ok">${esc(v)}</span>`;
+          if (v.includes("partial")) return `<span class="tag warn">${esc(v)}</span>`;
+          if (v.includes("fail") || v.includes("false") || v.includes("timeout")) return `<span class="tag err">${esc(v)}</span>`;
+          if (v.includes("running")) return `<span class="tag">${esc(v)}</span>`;
+          return `<span class="tag">${esc(v || "—")}</span>`;
+        };
+        const workerRows = workers.map((w, i) => `<tr>
+          <td>#${i + 1}</td>
+          <td><span class="mono">${esc(w.model || "")}</span></td>
+          <td>${statusTag(w.status)}</td>
+          <td>${esc(w.msg || "")}</td>
+          <td>${esc(w.elapsed || 0)}s</td>
+        </tr>`);
+        document.getElementById("orch-workers-table").innerHTML = table(["#", "Model", "Status", "Message", "Elapsed"], workerRows, "No worker status files yet");
+
+        const judges = orch.judge_verdicts || [];
+        const judgeRows = judges.map(j => `<tr>
+          <td><span class="mono">${esc(j.file)}</span></td>
+          <td>${statusTag(j.verdict)}</td>
+          <td>${esc(j.mtime ? new Date(j.mtime * 1000).toLocaleTimeString() : "")}</td>
+        </tr>`);
+        document.getElementById("orch-judges-table").innerHTML = table(["Judge transcript", "Verdict", "Modified"], judgeRows, "No judge verdicts yet");
+
+        const mailRows = mailbox.map(m => `<tr>
+          <td><span class="mono">${esc(m.name)}</span></td>
+          <td>${esc(m.size)} B</td>
+          <td>${esc(m.modified ? new Date(m.modified * 1000).toLocaleTimeString() : "")}</td>
+        </tr>`);
+        document.getElementById("orch-mailbox-table").innerHTML = table(["File", "Size", "Modified"], mailRows, "Mailbox empty / .ai_agents/shared not found");
+      } catch (err) {
+        // Orchestration is best-effort; never break the main dashboard on its failure.
+        document.getElementById("orch-section").style.display = "none";
+      }
+    }
     refresh();
+    refreshOrchestration();
     setInterval(refresh, 1500);
+    setInterval(refreshOrchestration, 2000);
   </script>
 </body>
 </html>

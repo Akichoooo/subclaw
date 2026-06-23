@@ -139,13 +139,18 @@ The streaming translation is the part that breaks in homegrown runners: each Ope
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │ /subclaw (Claude Code slash command, claude/subclaw.md)          │
-│   - reads task, picks model tier, decides worker count           │
+│   - reads task, picks model tier, decides worker count            │
+│   - Step 0.5: writes acceptance criteria (stop-condition contract)│
+│   - Step 7b/7c: dispatches an independent judge (smart, read-only)│
+│     with a 3-round cap; escalates to human past the cap           │
 └──────────────────┬───────────────────────────────────────────────┘
-                   │ spawns N workers
+                   │ spawns N workers + (optional) judge worker
                    ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │ run-claw-pool.sh (cli-skills/run-claw-pool.sh)                   │
 │   - per worker: isolated CLAUDE_CONFIG_DIR, x-session-id header  │
+│   - per-brief frontmatter override: tools: / permission:         │
+│     (judge briefs pin tools: Read,Glob,Grep for read-only)       │
 │   - drives the `claude` CLI in parallel via GNU parallel / xargs │
 └──────────────────┬───────────────────────────────────────────────┘
                    │ HTTP POST http://localhost:4748/v1/messages
@@ -159,6 +164,10 @@ The streaming translation is the part that breaks in homegrown runners: each Ope
 │   - rebind_session on 429                                        │
 │   - openai_to_anthropic_chunk (stream translation)               │
 │   - /stats: cache hit rate, cost, key pool state                 │
+│   - /orchestration: read-only view of orchestrator task tree,    │
+│     worker statuses, judge verdicts + round counter, shared      │
+│     mailbox (configured via ORCH_REPORTS_DIR; path-traversal     │
+│     guarded; surfaced on the dashboard as "Orchestration")       │
 └──────────────────┬───────────────────────────────────────────────┘
                    │ upstream HTTPS to provider
                    ▼

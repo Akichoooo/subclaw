@@ -54,6 +54,29 @@ function Render-Snapshot {
     Write-Output ("  {0} | {1} | {2} | {3} | key=...{4} | session={5}" -f $ts, $r.client, $r.path, $r.status, $r.key_suffix, $r.session_id)
   }
 
+  # Orchestration layer (best-effort): judge round + latest verdicts.
+  if ($status.orchestration_enabled) {
+    $orch = Get-Json "$ProxyUrl/orchestration"
+    if ($orch -and $orch.enabled) {
+      Write-Output ""
+      $o = $orch.orchestrator
+      if ($o) {
+        Write-Output ("Orchestration: model={0} | running={1} | msg={2}" -f $o.model, $o.running, $o.msg)
+      }
+      Write-Output ("Judge gate: round={0}/{1}" -f $orch.judge_round, $orch.judge_cap)
+      $judges = @($orch.judge_verdicts | Select-Object -First 5)
+      if ($judges.Count -gt 0) {
+        Write-Output "Latest judge verdicts:"
+        foreach ($j in $judges) {
+          $jt = if ($j.mtime) { ([DateTimeOffset]::FromUnixTimeSeconds([int64]$j.mtime)).ToLocalTime().ToString("HH:mm:ss") } else { "--:--:--" }
+          Write-Output ("  {0} | {1} | {2}" -f $jt, $j.verdict, $j.file)
+        }
+      } else {
+        Write-Output "Latest judge verdicts: (none yet)"
+      }
+    }
+  }
+
   if ($ReportsDir -and (Test-Path -LiteralPath $ReportsDir)) {
     Write-Output ""
     Write-Output "Reports:"
