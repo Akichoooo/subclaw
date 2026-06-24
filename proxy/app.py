@@ -1325,6 +1325,14 @@ async def health_upstream() -> bool:
 # ---------- Orchestration-layer observability (read-only) ----------
 
 _JUDGE_VERDICT_RE = re.compile(r"JUDGE_VERDICT:\s*(TRUE|PARTIAL|FALSE)", re.IGNORECASE)
+# Parses the round number out of a judge transcript filename like
+# 'task-N-judge-<round>-<stamp>.md'. Module-level so we don't recompile per
+# /orchestration request (the dashboard polls every 2s).
+_JUDGE_ROUND_RE = re.compile(r"judge[^\d]*(\d+)", re.IGNORECASE)
+# How many judge transcripts we actually read+parse per /orchestration call.
+# The dashboard only renders the newest 10, so reading more is pure waste —
+# but we still stat all candidates to sort by mtime (stat is cheap, read is not).
+_JUDGE_READ_LIMIT = 12
 
 
 def _safe_reports_root(requested: str) -> Optional[str]:
@@ -1452,7 +1460,13 @@ def _read_judge_verdicts(reports_dir: str, root_abs: str = "") -> List[Dict[str,
             continue
         search_dirs.append(d)
 
+    # Two-phase scan to avoid reading every historical transcript on each
+    # 2s dashboard poll: (1) stat all candidates to get path+mtime, sort newest-
+    # first; (2) read+regex ONLY the newest _JUDGE_READ_LIMIT. Stat is cheap;
+    # read is the cost. Older transcripts (which the dashboard doesn't show
+    # anyway) are never opened.
     seen_paths: set = set()
+    candidates_by_mtime: List[Tuple[float, str, str]] = []  # (mtime, full_path, name)
     for d in search_dirs:
         try:
             names = os.listdir(d)
@@ -1465,29 +1479,34 @@ def _read_judge_verdicts(reports_dir: str, root_abs: str = "") -> List[Dict[str,
             if full in seen_paths:
                 continue
             seen_paths.add(full)
-            text = _read_text_capped(full)
-            if text is None:
-                continue
-            # The judge brief requires 'End with EXACTLY one verdict line', so the
-            # authoritative verdict is the LAST JUDGE_VERDICT: in the transcript —
-            # not the first. A judge reasoning aloud may write 'JUDGE_VERDICT: FALSE
-            # if X...' while discussing, before concluding 'JUDGE_VERDICT: TRUE'.
-            # re.search would pick the discussion line; finditer + last picks the
-            # real conclusion.
-            matches = list(_JUDGE_VERDICT_RE.finditer(text))
-            if not matches:
-                continue
-            m = matches[-1]
             try:
                 mtime = os.path.getmtime(full)
             except OSError:
                 mtime = 0.0
-            verdicts.append({
-                "file": name,
-                "verdict": m.group(1).upper(),
-                "mtime": mtime,
-                "path": full,
-            })
+            candidates_by_mtime.append((mtime, full, name))
+    candidates_by_mtime.sort(key=lambda c: c[0], reverse=True)
+
+    verdicts: List[Dict[str, Any]] = []
+    for mtime, full, name in candidates_by_mtime[:_JUDGE_READ_LIMIT]:
+        text = _read_text_capped(full)
+        if text is None:
+            continue
+        # The judge brief requires 'End with EXACTLY one verdict line', so the
+        # authoritative verdict is the LAST JUDGE_VERDICT: in the transcript —
+        # not the first. A judge reasoning aloud may write 'JUDGE_VERDICT: FALSE
+        # if X...' while discussing, before concluding 'JUDGE_VERDICT: TRUE'.
+        # re.search would pick the discussion line; finditer + last picks the
+        # real conclusion.
+        matches = list(_JUDGE_VERDICT_RE.finditer(text))
+        if not matches:
+            continue
+        m = matches[-1]
+        verdicts.append({
+            "file": name,
+            "verdict": m.group(1).upper(),
+            "mtime": mtime,
+            "path": full,
+        })
     verdicts.sort(key=lambda v: v["mtime"], reverse=True)
     return verdicts
 
@@ -1532,16 +1551,16 @@ def orchestration_payload(reports_dir: str) -> Dict[str, Any]:
     )
     judges = _read_judge_verdicts(reports_dir, root_abs)
     mailbox = _read_shared_mailbox(reports_dir, root_abs)
-    # judge_round = highest round number seen across judge transcripts (parsed
-    # from filenames like 'task-N-judge-<round>-<stamp>.md'). Falls back to the
-    # count of distinct judge files if no round number is parseable. Using max
-    # avoids a retry within the same round (which produces a new stamp and thus
-    # a new file) inflating the counter past the cap and falsely flagging red.
-    round_re = re.compile(r"judge[^\d]*(\d+)", re.IGNORECASE)
+    # judge_round = highest round number seen across the (already limited to
+    # _JUDGE_READ_LIMIT) judge transcripts, parsed from filenames like
+    # 'task-N-judge-<round>-<stamp>.md'. Falls back to the count of distinct
+    # judge files if no round number is parseable. Using max avoids a retry
+    # within the same round (which produces a new stamp and thus a new file)
+    # inflating the counter past the cap and falsely flagging red.
     max_round = 0
     parsed_any = False
     for j in judges:
-        m = round_re.search(os.path.basename(j["file"]))
+        m = _JUDGE_ROUND_RE.search(os.path.basename(j["file"]))
         if m:
             parsed_any = True
             try:
