@@ -566,8 +566,16 @@ wire_api = "responses"</pre>
         </tr>`);
         document.getElementById("orch-mailbox-table").innerHTML = table(["File", "Size", "Modified"], mailRows, "Mailbox empty / .ai_agents/shared not found");
       } catch (err) {
-        // Orchestration is best-effort; never break the main dashboard on its failure.
-        document.getElementById("orch-section").style.display = "none";
+        // Fetch failed (proxy 5xx, network blip, etc.). Don't silently hide —
+        // that's indistinguishable from 'not configured' (handled above). Show
+        // an error state so the user knows the feature is configured but the
+        // proxy isn't answering /orchestration right now. Keep the block visible
+        // so a prior disabled/error message isn't wiped on a transient failure.
+        const section = document.getElementById("orch-section");
+        section.style.display = "";
+        section.querySelector(".section-head h2").textContent = "Orchestration (error)";
+        section.querySelector(".body").innerHTML =
+          `<div class="empty">Could not reach <code class="mono">/orchestration</code>.<br><span class="muted">${esc(err.message || String(err))}</span><br><span class="muted">Is the proxy up? Retrying in 2s…</span></div>`;
       }
     }
     refresh();
