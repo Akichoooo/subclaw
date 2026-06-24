@@ -453,6 +453,36 @@ If user says "apply" / "patch it" / "go": **Claude (not the worker) makes the ed
 
 ---
 
+## Step 9.5 - Cleanup (subclaw does not auto-delete; prune periodically)
+
+subclaw is **append-only** by design — it never deletes your reports, judge transcripts, or status files, because you may want to review them. That means artifacts accumulate:
+
+```
+<workdir>/.ai_agents/
+  reports/   pool_status.<stamp>.json, worker_*.status.json, <base>.claw.<stamp>.md
+  judges/    task-N-judge-<round>-<stamp>.md
+  shared/    acceptance-<slug>.md, worker-to-worker findings
+```
+
+(If `.ai_agents/` didn't exist at pool start, reports land in `./claw-reports/` instead.)
+
+Over weeks of use this grows to hundreds/thousands of files. The `/orchestration` endpoint only reads the newest judge transcripts (12) so dashboard perf stays fine, but `os.listdir` still scans all of them each poll, and disk grows unbounded.
+
+**Prune when you're done with a goal** (the orchestrator can do this on request, never automatically):
+```bash
+# Keep only the last 50 reports (the `[[ -n "$line" ]]` guard handles empty input
+# portably, unlike xargs -r which is GNU-only)
+ls -t <workdir>/.ai_agents/reports/*.md 2>/dev/null | tail -n +51 | while read -r f; do [ -n "$f" ] && rm -f "$f"; done
+# Empty the judges dir once the goal is accepted
+rm -f <workdir>/.ai_agents/judges/*.md
+# Clear stale pool_status / worker status (a new run overwrites worker_*.status.json anyway)
+rm -f <workdir>/.ai_agents/reports/pool_status.*.json <workdir>/.ai_agents/reports/worker_*.status.json
+```
+
+Do NOT delete `.ai_agents/shared/acceptance-<slug>.md` while a judge loop is still running — the judge reads it. Prune only after the goal is accepted or abandoned.
+
+---
+
 ## Failure modes you'll actually hit
 
 | Symptom | Likely cause | Fix |
