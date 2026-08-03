@@ -143,3 +143,29 @@ subclaw 此前已兼容 Claude Code 与 Codex CLI 两个编排引擎，但实际
 | 客户端身份 | 无，仅 session 粘性 | 虚拟 key 识别 + UA 兜底，四 agent 费用可归因 |
 | 预算控制 | 无（`--budget` 仅 runner 记录） | per-agent 日预算硬拦截（429） |
 | 可观测性 | key 请求/失败计数 | + 每 key 熔断状态/冷却倒计时 + 客户端花费视图 |
+
+### 6.4 思考过程与关键决策（为什么这么做）
+
+**决策 1：WorkBuddy 不硬凑 worker 角色，而是“编排者 + 模型客户端”双接入。**
+调查确认 WorkBuddy 是 Electron 桌面 agent、无 headless CLI 后，曾考虑两个弃案：① 等官方出 CLI（阻塞交付）；② 用 `kimi acp` 之类的外部协议硬包一层（复杂且脆弱）。最终选择双接入：编排能力用现成 runner（零新增进程类型，回显直接继承 kimi runner 的实时流式），模型流量用 models.json 接入（WorkBuddy 原生支持 Custom vendor + 全路径 URL，零代码改动）。**原则：每个引擎只用它自己最自然的接入面，不发明新适配层**——这与引擎特化路由的“物理隔离”哲学一脉相承。
+
+**决策 2：熔断器用“软过滤”而非硬排除。**
+冷却中的 key 被 `candidate_indices` 跳过，但全池都冷却时回退全集而不是报 503。理由：上游限流常是短时的，硬拒绝会让整个 worker 池雪崩；回退全集后由上游自己返回 429，客户端（各 runner）的重试逻辑能自然消化。LiteLLM 的硬拒适合多租户 SaaS，单机四客户端场景软过滤更稳。
+
+**决策 3：身份识别主通道选 Bearer 虚拟 key，而不是自定义 header。**
+四个客户端的 header 注入能力参差（Codex 强、Kimi 在推进、WorkBuddy 无文档），但**每个客户端都天然发送 Authorization/x-api-key**。用 `ck-*` 虚拟 key 做身份，零客户端改造；UA 模式表只做兜底归因（不影响功能，只影响统计精度）。
+
+**决策 4：预算用入口估算计费，而非响应后精确计费。**
+流式响应的 usage 在不同协议/不同转换链路里拿取不一致，精确归因要把 client 上下文穿透到 5 个 stream 函数，侵入大。入口估算（请求 token × 单价 + 固定输出估 1024）误差有界且实现 20 行；预算的目的是“防失控”不是“对账”，误差可接受。若未来要精确对账，在 `stats` 的 token 统计点按 client 分桶即可。
+
+**决策 5：坚持单文件 + 纯内存，不引入 Redis/SQLite。**
+LiteLLM 的分层预算依赖 PostgreSQL 是因为它服务多租户；claw-proxy 是单机四客户端，内存 dict + 自然日重置足够，重启丢当天花费统计是可接受代价（换来零依赖、零运维、保持 app.py 可整体审阅）。
+
+### 6.5 优势总结（这套架构现在领先在哪）
+
+1. **四引擎同一 key 池、同一治理面**：claude/codex/kimi/workbuddy 任意一个作编排者，共享模型发现、容量、熔断、预算——市面上 LiteLLM/CCR/OmniRoute 只做网关，不管编排层；Claude/Codex 原生 subagent 只管自家引擎。subclaw 是两者中间的空位。
+2. **串线 bug 从“提醒级”升级为“结构级”防护**：ROUTING RULES 提示词约束 + 每引擎独立技能包物理隔离，双保险。
+3. **回显从“事后”变“实时”**：kimi runner 逐行解析 stream-json，tool_call/PROGRESS 秒级进 status.json，STUCK 检测兜底；这是三引擎 CLI 中唯一真正流式的方案。
+4. **故障自愈**：429 学 Retry-After 精确冷却而非盲重试；5xx 跳闸避免打尸体；401 永久下线防止反复烧无效请求——此前 codex 兼容性问题里“上游抖动→worker 整批 FAIL”的链条被切断。
+5. **钱有账可查**：哪个 agent 花了多少、还剩多少预算，`/api/status` 一眼可见；预算超限在网关层拦截，不会波及上游账户。
+6. **可演进位预留好**：Agent-as-a-Router 的路由记忆库、MemCon 的上下文注入控制、memorix 式跨会话记忆，都能在不改现有架构的前提下叠加（数据面已在：route_event/CLIENT_SPEND/审计标记就是未来的训练信号）。
