@@ -9,6 +9,16 @@ author: Akichoooo
 
 # /subclaw - Multi-model subagent orchestrator (global)
 
+## ROUTING RULES (obey first, before anything else)
+
+1. Current orchestrator engine = **claude**. The delegation paths described in this file are the ONLY legal paths in this engine.
+2. NEVER call other engines' NATIVE subagent mechanisms: no Codex TOML agents (`~/.codex/agents/*.toml`, `[agents]` config), no Kimi `--agent-file` / `/swarm`. Using them inside Claude causes hard errors (known cross-wiring bug class).
+3. Spawning any engine CLI as an EXTERNAL worker process (`claude -p`, `codex exec`, `kimi -p`) is allowed — but only through this skill's runner scripts (`run-claw-pool.sh`), never by hand-writing engine-specific flags.
+4. Claude-native delegation (Task tool / `.claude/agents/*.md`) stays available for Claude-side subagents, but worker pools must go through the claw runner.
+5. If the user asks for another engine's subagent mechanism, explain it is unavailable in this engine and offer the Claude equivalent.
+
+---
+
 Goal: **cheap worker models do the heavy reading and drafting; Claude curates the task, picks the right model tier, dispatches a team, then verifies.** Save Claude tokens; keep quality at the Claude-validated bar.
 
 This is a **global** Claude Code slash command - it works in any working directory and is **generic over models**: it discovers what's routable at runtime from the gateway, so it is not tied to any single vendor.

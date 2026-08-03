@@ -975,6 +975,10 @@ async def stream_responses(request: Request, openai_req: Dict[str, Any], model: 
         route_event("codex", "/v1/responses", model, idx, session_id, "stream")
         output_index = 0
         text_started = False
+        text_buf = ""
+        block_kind: Dict[Any, str] = {}
+        pending_tools: Dict[Any, Dict[str, str]] = {}
+        output_items: List[Dict[str, Any]] = []
         tool_calls: Dict[int, Dict[str, str]] = {}
         total_input = total_output = total_cached = 0
         try:
@@ -1011,10 +1015,13 @@ async def stream_responses(request: Request, openai_req: Dict[str, Any], model: 
                                 continue
                             if protocol == "anthropic":
                                 typ = data.get("type")
+                                ev_index = data.get("index")
                                 if typ == "content_block_start":
                                     block = data.get("content_block", {}) or {}
                                     if block.get("type") == "text":
+                                        block_kind[ev_index] = "text"
                                         text_started = True
+                                        text_buf = ""
                                         yield sse(
                                             "response.output_item.added",
                                             {
@@ -1040,21 +1047,33 @@ async def stream_responses(request: Request, openai_req: Dict[str, Any], model: 
                                             },
                                         )
                                     elif block.get("type") == "tool_use":
+                                        block_kind[ev_index] = "tool"
                                         call_id = block.get("id") or f"call_{output_index}"
-                                        item = {
-                                            "type": "function_call",
-                                            "id": call_id,
+                                        pending_tools[ev_index] = {
                                             "call_id": call_id,
                                             "name": block.get("name", ""),
-                                            "arguments": json.dumps(block.get("input", {}), ensure_ascii=False),
-                                            "status": "completed",
+                                            "args": "",
                                         }
-                                        yield sse("response.output_item.added", {"type": "response.output_item.added", "output_index": output_index, "item": item})
-                                        yield sse("response.output_item.done", {"type": "response.output_item.done", "output_index": output_index, "item": item})
-                                        output_index += 1
+                                        yield sse(
+                                            "response.output_item.added",
+                                            {
+                                                "type": "response.output_item.added",
+                                                "output_index": output_index,
+                                                "item": {
+                                                    "type": "function_call",
+                                                    "id": call_id,
+                                                    "call_id": call_id,
+                                                    "name": block.get("name", ""),
+                                                    "arguments": "",
+                                                    "status": "in_progress",
+                                                },
+                                            },
+                                        )
                                 elif typ == "content_block_delta":
                                     delta = data.get("delta", {}) or {}
                                     if delta.get("type") == "text_delta":
+                                        text_piece = delta.get("text", "")
+                                        text_buf += text_piece
                                         yield sse(
                                             "response.output_text.delta",
                                             {
@@ -1062,21 +1081,55 @@ async def stream_responses(request: Request, openai_req: Dict[str, Any], model: 
                                                 "item_id": f"msg_{output_index}",
                                                 "output_index": output_index,
                                                 "content_index": 0,
-                                                "delta": delta.get("text", ""),
+                                                "delta": text_piece,
                                             },
                                         )
-                                elif typ == "content_block_stop" and text_started:
-                                    yield sse("response.output_text.done", {"type": "response.output_text.done", "item_id": f"msg_{output_index}", "output_index": output_index, "content_index": 0, "text": ""})
-                                    yield sse(
-                                        "response.output_item.done",
-                                        {
-                                            "type": "response.output_item.done",
-                                            "output_index": output_index,
-                                            "item": {"type": "message", "id": f"msg_{output_index}", "status": "completed", "role": "assistant", "content": []},
-                                        },
-                                    )
-                                    output_index += 1
-                                    text_started = False
+                                    elif delta.get("type") == "input_json_delta":
+                                        pt = pending_tools.get(ev_index)
+                                        if pt is not None:
+                                            pt["args"] += delta.get("partial_json", "") or ""
+                                elif typ == "content_block_stop":
+                                    kind = block_kind.pop(ev_index, None)
+                                    if kind == "tool":
+                                        pt = pending_tools.pop(ev_index, None)
+                                        if pt is not None:
+                                            args_raw = pt["args"] or "{}"
+                                            try:
+                                                json.loads(args_raw)
+                                                args_out = args_raw
+                                            except Exception:
+                                                args_out = json.dumps(repair_tool_args(args_raw), ensure_ascii=False)
+                                            item = {
+                                                "type": "function_call",
+                                                "id": pt["call_id"],
+                                                "call_id": pt["call_id"],
+                                                "name": pt["name"],
+                                                "arguments": args_out,
+                                                "status": "completed",
+                                            }
+                                            yield sse("response.output_item.done", {"type": "response.output_item.done", "output_index": output_index, "item": item})
+                                            output_items.append(item)
+                                            output_index += 1
+                                    elif kind == "text" and text_started:
+                                        yield sse("response.output_text.done", {"type": "response.output_text.done", "item_id": f"msg_{output_index}", "output_index": output_index, "content_index": 0, "text": text_buf})
+                                        item = {
+                                            "type": "message",
+                                            "id": f"msg_{output_index}",
+                                            "status": "completed",
+                                            "role": "assistant",
+                                            "content": [{"type": "output_text", "text": text_buf, "annotations": []}],
+                                        }
+                                        yield sse(
+                                            "response.output_item.done",
+                                            {
+                                                "type": "response.output_item.done",
+                                                "output_index": output_index,
+                                                "item": item,
+                                            },
+                                        )
+                                        output_items.append(item)
+                                        output_index += 1
+                                        text_started = False
                                 elif typ == "message_delta":
                                     total_output = (data.get("usage") or {}).get("output_tokens", total_output)
                                 continue
@@ -1088,6 +1141,7 @@ async def stream_responses(request: Request, openai_req: Dict[str, Any], model: 
                             choice = (data.get("choices") or [{}])[0]
                             delta = choice.get("delta", {}) or {}
                             if delta.get("content"):
+                                text_buf += delta["content"]
                                 if not text_started:
                                     text_started = True
                                     yield sse(
@@ -1120,15 +1174,23 @@ async def stream_responses(request: Request, openai_req: Dict[str, Any], model: 
                                     tc["arguments"] += fn.get("arguments") or ""
                             if choice.get("finish_reason"):
                                 if text_started:
-                                    yield sse("response.output_text.done", {"type": "response.output_text.done", "item_id": f"msg_{output_index}", "output_index": output_index, "content_index": 0, "text": ""})
+                                    yield sse("response.output_text.done", {"type": "response.output_text.done", "item_id": f"msg_{output_index}", "output_index": output_index, "content_index": 0, "text": text_buf})
+                                    msg_item = {
+                                        "type": "message",
+                                        "id": f"msg_{output_index}",
+                                        "status": "completed",
+                                        "role": "assistant",
+                                        "content": [{"type": "output_text", "text": text_buf, "annotations": []}],
+                                    }
                                     yield sse(
                                         "response.output_item.done",
                                         {
                                             "type": "response.output_item.done",
                                             "output_index": output_index,
-                                            "item": {"type": "message", "id": f"msg_{output_index}", "status": "completed", "role": "assistant", "content": []},
+                                            "item": msg_item,
                                         },
                                     )
+                                    output_items.append(msg_item)
                                     output_index += 1
                                     text_started = False
                                 for tc_idx in sorted(tool_calls):
@@ -1144,6 +1206,7 @@ async def stream_responses(request: Request, openai_req: Dict[str, Any], model: 
                                     }
                                     yield sse("response.output_item.added", {"type": "response.output_item.added", "output_index": output_index, "item": item})
                                     yield sse("response.output_item.done", {"type": "response.output_item.done", "output_index": output_index, "item": item})
+                                    output_items.append(item)
                                     output_index += 1
         except Exception as exc:
             yield sse("response.failed", {"type": "response.failed", "response": {"id": resp_id, "status": "failed", "error": {"message": str(exc)}}})
@@ -1164,7 +1227,7 @@ async def stream_responses(request: Request, openai_req: Dict[str, Any], model: 
                     "object": "response",
                     "status": "completed",
                     "model": model,
-                    "output": [],
+                    "output": output_items,
                     "usage": {"input_tokens": total_input, "output_tokens": total_output, "total_tokens": total_input + total_output},
                 },
             },

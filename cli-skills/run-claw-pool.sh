@@ -23,6 +23,7 @@ TASKDIR=""
 TOOLS="Read,Glob,Grep"
 PERMMODE="default"
 OVERFLOW=0
+BUDGET=""
 STAMP="$(date +%Y%m%d_%H%M%S)"
 ENABLE_TREE_UI="${CLAW_TREE_UI:-1}"
 TREE_UI_PID=""
@@ -51,6 +52,7 @@ OPTS:
   --direct          bypass proxy; use claw-keys.tsv keys directly
   --proxy-url URL   override proxy base (default http://localhost:4748)
   --overflow        direct mode: also use overflow keys
+  --budget USD      per-session spend budget (recorded in pool status; proxy-side enforcement pending)
   --bash            add Bash to workers and bypass permissions
   --write           add Bash+Edit+Write tools and bypass permissions
   --tools T         comma list to override allowed tools
@@ -171,6 +173,7 @@ while [ $# -gt 0 ]; do
     --tools) TOOLS="$2"; shift 2;;
     --perm) PERMMODE="$2"; shift 2;;
     --overflow) OVERFLOW=1; shift;;
+    --budget) BUDGET="$2"; shift 2;;
     --no-tree) ENABLE_TREE_UI=0; shift;;
     --info)
       need_cmd curl
@@ -329,6 +332,9 @@ else
   echo "keys: $NKEYS (direct, overflow=$OVERFLOW)"
 fi
 echo "workdir: $WORKDIR  tools: $TOOLS  timeout=${TIMEOUT}s  out=$OUTDIR"
+if [ -n "$BUDGET" ]; then
+  echo "budget: $BUDGET USD (tracked per session; hard enforcement via proxy circuit breaker pending)"
+fi
 [ "$ENABLE_TREE_UI" = "1" ] && echo "tree UI: enabled (PID=$TREE_UI_PID, status=$STATUS_JSON)"
 
 run_one() {
@@ -547,9 +553,9 @@ to=0
 for task in "${TASKS[@]}"; do
   base="$(basename "$task" .md)"
   r="$OUTDIR/${base}.claw.${STAMP}.md"
-  if grep -q '\[EXIT\] code=0 ' "$r" 2>/dev/null; then
+  if grep -qE '\[EXIT\] code=0([^0-9]|$)' "$r" 2>/dev/null; then
     ok=$((ok + 1))
-  elif grep -q '\[EXIT\] code=124 ' "$r" 2>/dev/null; then
+  elif grep -qE '\[EXIT\] code=124([^0-9]|$)' "$r" 2>/dev/null; then
     to=$((to + 1))
   else
     fail=$((fail + 1))

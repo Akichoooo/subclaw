@@ -5,6 +5,14 @@ description: Use when Codex should delegate repo scans, reviews, drafting, or pe
 
 # subclaw
 
+## ROUTING RULES (obey first, before anything else)
+
+1. Current orchestrator engine = **codex**. The delegation paths described in this file are the ONLY legal paths in this engine.
+2. NEVER call other engines' NATIVE subagent mechanisms: no Claude Code Task tool / `.claude/agents/*.md`, no Kimi `--agent-file` / `/swarm`. Using them inside Codex causes hard errors (known cross-wiring bug class).
+3. Spawning any engine CLI as an EXTERNAL worker process (`codex exec`, `claude -p`, `kimi -p`) is allowed — but only through this skill's runner scripts, never by hand-writing engine-specific flags.
+4. Codex-native delegation (`~/.codex/agents/*.toml` + `[agents]` config) stays available for Codex-side subagents, but claw worker pools must go through `run_codex_claw_pool.ps1`.
+5. If the user asks for another engine's subagent mechanism, explain it is unavailable in this engine and offer the Codex equivalent.
+
 Codex is the orchestrator. Claw Proxy can serve both Claude CLI workers and Codex CLI workers from the same model/key pool.
 
 - Proxy: `http://localhost:4748`
