@@ -1,0 +1,33 @@
+{
+  "_comment": "Claw Proxy virtual client keys. Copy to clients.json. Each coding agent gets its own ck-* key: identity attribution, optional daily budget, optional model allowlist. Bearer/x-api-key matching; falls back to User-Agent attribution when a request carries no virtual key (or 'proxy-managed').",
+  "clients": [
+    {
+      "key": "ck-claude-REPLACE_ME",
+      "name": "claude",
+      "agent": "claude",
+      "budget_usd_per_day": 0,
+      "models": []
+    },
+    {
+      "key": "ck-codex-REPLACE_ME",
+      "name": "codex",
+      "agent": "codex",
+      "budget_usd_per_day": 0,
+      "models": []
+    },
+    {
+      "key": "ck-kimi-REPLACE_ME",
+      "name": "kimi",
+      "agent": "kimi",
+      "budget_usd_per_day": 0,
+      "models": []
+    },
+    {
+      "key": "ck-workbuddy-REPLACE_ME",
+      "name": "workbuddy",
+      "agent": "workbuddy",
+      "budget_usd_per_day": 0,
+      "models": []
+    }
+  ]
+}

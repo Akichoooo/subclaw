@@ -99,3 +99,47 @@ subclaw 此前已兼容 Claude Code 与 Codex CLI 两个编排引擎，但实际
 
 - **P1**：stream 路径补 failover（429/5xx 换 key 重试）；claude runner 改 `--output-format stream-json --verbose` 解析修复其回显黑洞；codex runner 补重试。
 - **P2**：路由记忆库（模型 × 任务类型成功率统计进编排 prompt）；审计清单化 + 廉价预检闸门；心跳/通信预算全分支铺开；评估 memorix MCP 或自建六层记忆（候选→审核→批准门控）。
+
+---
+
+## 六、第二轮优化（2026-08-03 下午）：WorkBuddy 接入 + 代理层治理增强
+
+### 6.1 WorkBuddy 成为第四条链路
+
+本机调查确认 WorkBuddy v5.3.8 为 Electron 桌面 agent（`D:\devloop\WorkBuddy\WorkBuddy.exe`），关键事实：
+- 有 skills 目录（`~/.workbuddy/skills/`）、MCP 支持（`.mcp.json` http 型）、memory/plans/tasks 体系；
+- **无 headless CLI**——不能像 kimi/codex/claude 那样被 spawn 成 worker 进程；
+- 自带模型注册表 `~/.workbuddy/models.json`：`{id, vendor:"Custom", url, apiKey, supportsToolCall...}`，url 直指 `/v1/chat/completions`。
+
+由此确定双接入模式（均已写入 `cli-skills/workbuddy/subclaw/SKILL.md`，含 workbuddy 版 ROUTING RULES）：
+1. **编排者模式**：WorkBuddy 通过 shell 调用其他引擎的 runner 派 worker（优先 kimi runner，实时流式回显）——符合“spawn 外部进程合法、原生子代理机制禁跨引擎”的路由原则；
+2. **模型客户端模式**：在 `models.json` 增加 claw 条目（url 指 `http://127.0.0.1:4748/v1/chat/completions`），WorkBuddy 自身对话流量也走 claw-proxy，统一 key 池与治理。
+
+### 6.2 代理层治理增强（借鉴 LiteLLM / CCR / OmniRoute / n9router）
+
+针对“不同 agent 与模型 key 管理”的调研结论落地为三项纯内存轻量改造（`proxy/app.py`）：
+
+**① Key 熔断器（三态状态机）**
+- 每 key 状态 `{fails, open_until, disabled, cooldowns, last_retry_after}`；
+- 错误分类：401/403 → 永久下线；429 → 优先学习服务端 `Retry-After`，否则指数退避（30s 起步、300s 封顶）；5xx/超时 → 连续 3 次失败跳闸冷却；
+- `candidate_indices` 选 key 时软过滤不可用 key（全池冷却时回退全集而非硬失败）；成功即重置；
+- `/api/status` 每 key 新增 `breaker: {state, cooldown_remaining, fails, last_retry_after}`。
+
+**② 虚拟 key 与客户端身份（`proxy/clients.json`，新增 `clients.example.json` 模板）**
+- 四个 agent 各一张 `ck-*` key（claude/codex/kimi/workbuddy），从 `Authorization: Bearer` / `x-api-key` 提取匹配；
+- 无虚拟 key 时 User-Agent 兜底归因（claude-cli/codex/KimiCLI/workbuddy 模式表）；
+- 支持 per-client 模型白名单（越权 403）。
+
+**③ Per-agent 日预算**
+- `budget_usd_per_day` 按自然日滑动重置；估算 token × 模型单价（取自 keys.json 的 `cost_per_1m_in/out`）累计；超限直接 429 拒绝（请求不打上游）；`ENFORCE_CLIENT_BUDGET=0` 可关；
+- `/api/status` 新增 `clients[]`：name/agent/budget/spend/requests。
+
+### 6.3 本轮提升对比
+
+| 指标 | 优化前 | 优化后 |
+|---|---|---|
+| 引擎覆盖 | claude / codex / kimi | + **workbuddy**（四链路） |
+| key 健康度 | 简单失败计数，429 后继续打 | 熔断器：429 冷却（学 Retry-After）、5xx 三连跳闸、401 永久下线 |
+| 客户端身份 | 无，仅 session 粘性 | 虚拟 key 识别 + UA 兜底，四 agent 费用可归因 |
+| 预算控制 | 无（`--budget` 仅 runner 记录） | per-agent 日预算硬拦截（429） |
+| 可观测性 | key 请求/失败计数 | + 每 key 熔断状态/冷却倒计时 + 客户端花费视图 |

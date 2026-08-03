@@ -55,6 +55,30 @@ KEY_REQUESTS: Dict[int, int] = {}
 RECENT_ROUTES = deque(maxlen=120)
 RR_COUNTER = 0
 
+# --- Key circuit breaker state (per upstream key index) -----------------
+# state: closed (normal) / open (cooling down); disabled keys never serve traffic.
+KEY_HEALTH: Dict[int, Dict[str, Any]] = {}
+BREAKER_FAIL_THRESHOLD = int(os.getenv("BREAKER_FAIL_THRESHOLD", "3"))
+BREAKER_COOLDOWN_SEC = float(os.getenv("BREAKER_COOLDOWN_SEC", "30"))
+BREAKER_COOLDOWN_MAX = float(os.getenv("BREAKER_COOLDOWN_MAX", "300"))
+
+# --- Virtual client keys (clients.json): identity + per-agent budget ----
+CLAW_CLIENTS_FILE = os.getenv("CLAW_CLIENTS_FILE") or os.path.join(APP_DIR, "clients.json")
+CLAW_CLIENTS: List[Dict[str, Any]] = []
+CLIENT_SPEND: Dict[str, Dict[str, Any]] = {}
+ENFORCE_CLIENT_BUDGET = os.getenv("ENFORCE_CLIENT_BUDGET", "1") != "0"
+
+UA_AGENT_PATTERNS = [
+    ("claude-cli", "claude"),
+    ("claude-code", "claude"),
+    ("codex", "codex"),
+    ("openai/", "codex"),
+    ("kimicli", "kimi"),
+    ("kimi-cli", "kimi"),
+    ("kimi-code", "kimi"),
+    ("workbuddy", "workbuddy"),
+]
+
 DEGRADATION_PATTERNS = re.compile(
     r"(temporarily unavailable|safety classifier|classifier error|overloaded|"
     r"rate.?limit|try again|server error|internal error|upstream error|bad gateway)",
@@ -137,6 +161,182 @@ def load_keys_config() -> List[Dict[str, Any]]:
 CLAW_KEYS = load_keys_config()
 
 
+def load_clients_config() -> List[Dict[str, Any]]:
+    """Load virtual client keys (identity + budget) from clients.json.
+
+    Schema: {"clients": [{"key": "ck-xxx", "name": "claude", "agent": "claude",
+                          "budget_usd_per_day": 2.0, "models": []}]}
+    Empty/missing file is fine: identification then falls back to User-Agent.
+    """
+    try:
+        with open(CLAW_CLIENTS_FILE, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception:
+        return []
+    clients: List[Dict[str, Any]] = []
+    for raw in cfg.get("clients", []) or []:
+        if raw.get("key") and raw.get("name"):
+            clients.append(
+                {
+                    "key": str(raw["key"]),
+                    "name": str(raw["name"]),
+                    "agent": raw.get("agent") or str(raw["name"]),
+                    "budget_usd_per_day": float(raw.get("budget_usd_per_day") or 0),
+                    "models": raw.get("models") or [],
+                }
+            )
+    return clients
+
+
+CLAW_CLIENTS = load_clients_config()
+
+
+# --- Key circuit breaker -------------------------------------------------
+
+
+def key_health(idx: int) -> Dict[str, Any]:
+    state = KEY_HEALTH.get(idx)
+    if state is None:
+        state = {"fails": 0, "open_until": 0.0, "disabled": False, "cooldowns": 0, "last_retry_after": None}
+        KEY_HEALTH[idx] = state
+    return state
+
+
+def parse_retry_after(headers: Dict[str, str]) -> Optional[float]:
+    raw = (headers or {}).get("retry-after") or (headers or {}).get("Retry-After")
+    if not raw:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except Exception:
+        return None
+
+
+def record_key_success(idx: int) -> None:
+    KEY_FAILURES[idx] = 0
+    state = key_health(idx)
+    state["fails"] = 0
+    state["open_until"] = 0.0
+
+
+def record_key_failure(idx: int, status: int, headers: Optional[Dict[str, str]] = None) -> None:
+    state = key_health(idx)
+    if status in (401, 403):
+        state["disabled"] = True
+        logger.warning("key #%s disabled: auth failure (%s)", idx, status)
+        return
+    now = time.time()
+    if status == 429:
+        retry_after = parse_retry_after(headers or {})
+        backoff = min(BREAKER_COOLDOWN_MAX, BREAKER_COOLDOWN_SEC * (2 ** state["cooldowns"]))
+        cooldown = retry_after if retry_after is not None else backoff
+        state["cooldowns"] += 1
+        state["last_retry_after"] = retry_after
+        state["open_until"] = max(state["open_until"], now + cooldown)
+    elif status == 0 or 500 <= status <= 599:
+        state["fails"] += 1
+        if state["fails"] >= BREAKER_FAIL_THRESHOLD:
+            backoff = min(BREAKER_COOLDOWN_MAX, BREAKER_COOLDOWN_SEC * (2 ** (state["fails"] - BREAKER_FAIL_THRESHOLD)))
+            state["open_until"] = max(state["open_until"], now + backoff)
+
+
+def key_available(idx: int) -> bool:
+    state = KEY_HEALTH.get(idx)
+    if not state:
+        return True
+    if state["disabled"]:
+        return False
+    return time.time() >= state.get("open_until", 0.0)
+
+
+# --- Client identity + budget --------------------------------------------
+
+
+def agent_from_ua(request: Request) -> str:
+    ua = (request.headers.get("user-agent") or "").lower()
+    for pattern, agent in UA_AGENT_PATTERNS:
+        if pattern in ua:
+            return agent
+    return "unknown"
+
+
+def client_from_request(request: Request) -> Optional[Dict[str, Any]]:
+    """Identify the calling agent via virtual key (Bearer / x-api-key), else UA."""
+    auth = request.headers.get("authorization", "")
+    candidates = []
+    if auth.lower().startswith("bearer "):
+        candidates.append(auth[7:].strip())
+    xkey = request.headers.get("x-api-key", "")
+    if xkey:
+        candidates.append(xkey.strip())
+    for token in candidates:
+        if not token or token == "proxy-managed":
+            continue
+        for client in CLAW_CLIENTS:
+            if token == client["key"]:
+                return client
+    return None
+
+
+def client_name_for(request: Request) -> str:
+    client = client_from_request(request)
+    if client:
+        return client["name"]
+    return agent_from_ua(request)
+
+
+def model_cost_per_1m(model: str) -> Tuple[float, float]:
+    profile = MODEL_PROFILES.get(model) or {}
+    return float(profile.get("cost_per_1m_in") or 0), float(profile.get("cost_per_1m_out") or 0)
+
+
+def charge_client(request: Request, model: str, est_input_tokens: int, est_output_tokens: int) -> None:
+    client = client_from_request(request)
+    if not client or not (est_input_tokens or est_output_tokens):
+        return
+    price_in, price_out = model_cost_per_1m(model)
+    cost = (est_input_tokens * price_in + est_output_tokens * price_out) / 1_000_000
+    if cost <= 0:
+        return
+    day = time.strftime("%Y-%m-%d")
+    spend = CLIENT_SPEND.setdefault(client["name"], {"day": day, "usd": 0.0, "requests": 0})
+    if spend.get("day") != day:
+        spend["day"] = day
+        spend["usd"] = 0.0
+        spend["requests"] = 0
+    spend["usd"] += cost
+    spend["requests"] += 1
+
+
+def check_client_budget(request: Request, model: str) -> Optional[Response]:
+    """Return a 429 response if the identified client exceeded its daily budget."""
+    if not ENFORCE_CLIENT_BUDGET or not CLAW_CLIENTS:
+        return None
+    client = client_from_request(request)
+    if not client or client["budget_usd_per_day"] <= 0:
+        return None
+    if client["models"] and model not in client["models"]:
+        return JSONResponse(
+            status_code=403,
+            content={"error": {"message": f"client '{client['name']}' not allowed to use model '{model}'"}},
+        )
+    day = time.strftime("%Y-%m-%d")
+    spend = CLIENT_SPEND.get(client["name"]) or {}
+    if spend.get("day") == day and spend.get("usd", 0.0) >= client["budget_usd_per_day"]:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": {
+                    "message": (
+                        f"client '{client['name']}' daily budget exhausted "
+                        f"(${spend['usd']:.4f} >= ${client['budget_usd_per_day']:.2f})"
+                    )
+                }
+            },
+        )
+    return None
+
+
 def entry_supports_model(entry: Dict[str, Any], model: str) -> bool:
     models = entry.get("models") or []
     return not models or model in models
@@ -150,6 +350,11 @@ def candidate_indices(model: str, include_overflow: bool = False) -> List[int]:
     ]
     if not candidates:
         candidates = [i for i, entry in enumerate(CLAW_KEYS) if is_real_key(entry.get("key", ""))]
+    # Circuit breaker: skip keys that are disabled or cooling down (soft filter -
+    # if every key is unavailable, fall back to the full set rather than hard-fail).
+    healthy = [i for i in candidates if key_available(i)]
+    if healthy:
+        candidates = healthy
     if not include_overflow:
         primary = [i for i in candidates if CLAW_KEYS[i].get("tier", "primary") == "primary"]
         if primary:
@@ -788,6 +993,7 @@ async def post_with_failover(
         KEY_REQUESTS[idx] = KEY_REQUESTS.get(idx, 0) + 1
         if 200 <= last_status < 300:
             KEY_FAILURES[idx] = 0
+            record_key_success(idx)
             route_event(client_name, path, model, idx, session_id, str(last_status))
             return last_status, last_body, last_headers, idx, entry
         if last_status == 429:
@@ -797,6 +1003,7 @@ async def post_with_failover(
         if DEGRADATION_PATTERNS.search(body_text or ""):
             stats.classifier_degraded += 1
         KEY_FAILURES[idx] = KEY_FAILURES.get(idx, 0) + 1
+        record_key_failure(idx, last_status, last_headers)
         route_event(client_name, path, model, idx, session_id, f"retry:{last_status}", body_text[:160])
         if attempt >= RETRY_MAX_ATTEMPTS or not looks_degraded(last_status, body_text):
             return last_status, last_body, last_headers, idx, entry
@@ -1362,10 +1569,29 @@ def status_payload() -> Dict[str, Any]:
                         "requests": KEY_REQUESTS.get(i, 0),
                         "failures": KEY_FAILURES.get(i, 0),
                         "real": is_real_key(e.get("key", "")),
+                        "breaker": (
+                            {
+                                "state": "disabled"
+                                if key_health(i)["disabled"]
+                                else ("open" if time.time() < key_health(i)["open_until"] else "closed"),
+                                "cooldown_remaining": max(0, int(key_health(i)["open_until"] - time.time())),
+                                "fails": key_health(i)["fails"],
+                                "last_retry_after": key_health(i)["last_retry_after"],
+                            }
+                        ),
                     }
                     for i, e in enumerate(CLAW_KEYS)
                 ],
             },
+            "clients": [
+                {
+                    "name": c["name"],
+                    "agent": c["agent"],
+                    "budget_usd_per_day": c["budget_usd_per_day"],
+                    "spend": CLIENT_SPEND.get(c["name"], {}),
+                }
+                for c in CLAW_CLIENTS
+            ],
             "sessions": {
                 sid: {"key_index": idx, "key_suffix": (CLAW_KEYS[idx].get("key") or "")[-6:]}
                 for sid, idx in list(SESSION_BINDINGS.items())[-40:]
@@ -1798,6 +2024,10 @@ async def chat_completions(request: Request):
     model = body.get("model", "mimo")
     session_id = session_from_body(request, body, "chat")
     stats.requests += 1
+    budget_denied = check_client_budget(request, model)
+    if budget_denied is not None:
+        return budget_denied
+    charge_client(request, model, estimate_tokens(json.dumps(body.get("messages", []), ensure_ascii=False)), 1024)
     _, selected_entry = select_key(model, session_id=session_id)
     protocol = selected_entry.get("protocol", "anthropic")
     if protocol == "anthropic":
@@ -1843,6 +2073,12 @@ async def messages(request: Request):
     model = body.get("model", "mimo")
     session_id = session_from_body(request, body, "msg")
     stats.requests += 1
+    budget_denied = check_client_budget(request, model)
+    if budget_denied is not None:
+        return budget_denied
+    charge_client(
+        request, model, estimate_messages_tokens(body.get("system", ""), body.get("messages", []), body.get("tools", [])), 1024
+    )
     key_idx, entry = select_key(model, session_id=session_id)
     protocol = entry.get("protocol", "anthropic")
     if protocol == "anthropic":
@@ -1897,6 +2133,19 @@ async def responses(request: Request):
     session_id = session_from_body(request, body, "resp", body.get("prompt_cache_key", ""))
     openai_req = responses_to_openai_chat(body)
     stats.requests += 1
+    budget_denied = check_client_budget(request, model)
+    if budget_denied is not None:
+        return budget_denied
+    charge_client(
+        request,
+        model,
+        estimate_messages_tokens(
+            next((m["content"] for m in openai_req.get("messages", []) if m.get("role") == "system"), ""),
+            openai_req.get("messages", []),
+            openai_req.get("tools", []),
+        ),
+        1024,
+    )
     if body.get("stream"):
         return await stream_responses(request, openai_req, model, session_id)
     idx, entry = select_key(model, session_id=session_id)
