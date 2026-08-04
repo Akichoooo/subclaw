@@ -2,10 +2,10 @@
 
 # subclaw
 
-### Multi-Model LLM Gateway for Claude Code · Codex CLI · Aider · Cursor
+### Multi-Model LLM Gateway for Claude Code · Codex CLI · Kimi Code · WorkBuddy · Aider · Cursor
 
 **Slash command + FastAPI proxy.** Session-pinned multi-key rotation, Anthropic↔OpenAI protocol translation, rate-limit failover, budget circuit breaker.
-**Cut Claude API spend by 60-90% on read-heavy workloads** by dispatching the heavy reading to a swarm of cheap worker models.
+**Reduce orchestrator spend on read-heavy workloads** by dispatching the heavy reading to cheap worker models. Actual savings depend on your model price gap — we don't promise a fixed percentage.
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)
@@ -23,9 +23,9 @@
 
 ## The Problem
 
-If you use **Claude Code, Codex CLI, Aider, or Cursor** for serious work, you have hit at least one of these:
+If you use **Claude Code, Codex CLI, Kimi Code, WorkBuddy, Aider, or Cursor** for serious work, you have hit at least one of these:
 
-- 💸 **The bill.** One Opus loop on a 50k-token repo costs `$7.50`. One bad afternoon: `$150`.
+- 💸 **The bill.** Top-tier models charge premium rates for input tokens; long agentic loops over a large repo add up fast.
 - 🚦 **HTTP 429.** "Too Many Requests" — the moment you fire two agents in parallel, your single API key is rate-limited.
 - 🔒 **Vendor lock-in.** You pay full price even when 80% of the work is "scan 50 files, find unused imports" — a task a `gpt-4o-mini` would handle for 1/100th the cost.
 - 🧠 **Context bloat.** Your expensive model wastes 80k input tokens re-reading code it could have summarized in 200.
@@ -38,9 +38,9 @@ If you use **Claude Code, Codex CLI, Aider, or Cursor** for serious work, you ha
 
 | What you get | How it works |
 |---|---|
-| **60-90% lower spend** (read-heavy) | Heavy work (scan, draft, find) goes to models ~15-20x cheaper; Opus only audits the final summary. |
+| **Lower spend on read-heavy work** (saving = your price gap) | Heavy work (scan, draft, find) goes to cheaper worker models; the orchestrator only audits the final summary. |
 | **Bypass 429 rate limits** | N API keys, round-robin across worker sessions, transparent failover on throttling. |
-| **Prompt cache locality** | Each session is **pinned to one key** so Anthropic's prompt cache stays warm. Up to 90% cache hit rate. |
+| **Prompt cache locality** | Each session is **pinned to one key** so Anthropic's prompt cache stays warm. Hit rate depends on workload shape; pinning maximizes prefix reuse. |
 | **Drop-in protocol translation** | Workers using Claude Code (Anthropic protocol) can hit OpenAI endpoints transparently. No code changes. |
 | **Budget circuit breaker** | Per-session and per-day USD cap. Stops spending before the bill arrives. |
 | **Self-hosted, no SaaS** | Single `python app.py` on `localhost:4748`. Your keys never leave your box. |
@@ -107,7 +107,23 @@ chmod +x ~/.claude/scripts/run-claw-pool.sh
 chmod +x ~/.claude/scripts/live_tree_ui.py
 ```
 
-**For Codex CLI / Aider / Cursor:** see [`docs/integrations.md`](docs/integrations.md).
+**For Codex CLI:**
+```powershell
+# Windows (PowerShell); adjust for your OS
+Copy-Item -Recurse ./cli-skills/codex/subclaw ~/.codex/skills/subclaw
+```
+
+**For Kimi Code:**
+```powershell
+Copy-Item -Recurse ./cli-skills/kimi/subclaw ~/.kimi-code/skills/subclaw
+```
+
+**For WorkBuddy:**
+```powershell
+Copy-Item -Recurse ./cli-skills/workbuddy/subclaw ~/.workbuddy/skills/subclaw
+```
+
+Each engine gets its own skill package with a `ROUTING RULES` header (engine-specialized routing: an orchestrator only uses its own native delegation path; spawning other engines as external worker processes is allowed via the runners). Aider / Cursor: see [`docs/integrations.md`](docs/integrations.md).
 
 ### 3. Use it
 
@@ -136,7 +152,7 @@ See [`docs/use-cases.md`](docs/use-cases.md) for the full playbook.
 
 ## Benchmarks
 
-> *Illustrative projections from the assumptions shown below — not independently measured. Real savings vary heavily by workload.*
+> *Illustrative projections from the assumptions shown below — not independently measured. Real savings vary heavily by workload and by the actual price gap between your orchestrator model and worker models.*
 
 | Scenario | Single Opus (no proxy) | subclaw (Opus + cheap swarm) | Saving |
 |---|---|---|---|

@@ -2,10 +2,10 @@
 
 # subclaw
 
-### 面向 Claude Code / Codex CLI / Aider / Cursor 的多模型 LLM 网关
+### 面向 Claude Code / Codex CLI / Kimi Code / WorkBuddy / Aider / Cursor 的多模型 LLM 网关
 
 **斜杠命令 + FastAPI 代理。** 会话钉定的多 Key 轮询、Anthropic 与 OpenAI 协议双向翻译、限流故障转移、预算熔断器。
-**在以读取为主的工作负载上，将 Claude API 成本降低 60-90%** —— 把繁重的读取下发给廉价模型集群，让 Opus 只做最终审计。
+**在以读取为主的工作负载上降低编排者成本** —— 把繁重的读取下发给廉价 worker 模型，编排者只做最终审计。实际节省幅度取决于你选择的模型价差，我们不承诺固定百分比。
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)
@@ -23,9 +23,9 @@
 
 ## 痛点
 
-只要你在生产环境用 **Claude Code、Codex CLI、Aider 或 Cursor**，一定踩过至少一个：
+只要你在生产环境用 **Claude Code、Codex CLI、Kimi Code、WorkBuddy、Aider 或 Cursor**，一定踩过至少一个：
 
-- 💸 **账单失控。** 一次 Opus 在 5 万 token 仓库上跑死循环就是 7.5 美元。一个下午烧 150 美元并不罕见。
+- 💸 **账单失控。** 顶级模型的输入 token 单价高，在大仓库上跑长循环 agent，费用累积很快。
 - 🚦 **HTTP 429 限流。** 两个并发 Agent 一起跑，单 Key 立刻被限流。
 - 🔒 **厂商锁定。** 80% 的工作是"扫 50 个文件找未使用的 import"——`gpt-4o-mini` 百分之一的成本就能干，但你用 Opus 全价在做。
 - 🧠 **上下文膨胀。** 昂贵的模型把 8 万 token 用来重读代码，本来 200 token 的摘要就够了。
@@ -38,9 +38,9 @@
 
 | 你能拿到 | 实现方式 |
 |---|---|
-| **成本下降 60-90%**（读取密集型） | 扫、起草、检索等重活交给比 Opus 便宜约 15-20 倍的模型；Opus 只审计最终摘要。 |
+| **降低读取密集型工作的成本**（节省 = 你的模型价差） | 扫、起草、检索等重活交给更便宜的 worker 模型；编排者只审计最终摘要。 |
 | **绕过 429 限流** | 多把 API Key 在 worker session 之间轮询，限流时自动漂移。 |
-| **提示缓存亲和性** | 每个 session 钉在同一把 Key，Anthropic 提示缓存持续命中，最高 90%。 |
+| **提示缓存亲和性** | 每个 session 钉在同一把 Key，Anthropic 提示缓存持续命中。命中率取决于负载形态，钉定策略最大化前缀复用。 |
 | **协议自动翻译** | 使用 Claude Code（Anthropic 协议）的 worker 可以直连 OpenAI 端点，零代码改动。 |
 | **预算熔断器** | 单 session 与单日美元上限，到点停机，绝不让你破产。 |
 | **完全自托管** | 一行 `python app.py` 跑在 `localhost:4748`，Key 不出本机。 |
@@ -107,7 +107,23 @@ chmod +x ~/.claude/scripts/run-claw-pool.sh
 chmod +x ~/.claude/scripts/live_tree_ui.py
 ```
 
-**如果你用 Codex CLI / Aider / Cursor：** 见 [`docs/integrations.md`](docs/integrations.md)。
+**如果你用 Codex CLI：**
+```powershell
+# Windows (PowerShell)，其他系统自行调整
+Copy-Item -Recurse ./cli-skills/codex/subclaw ~/.codex/skills/subclaw
+```
+
+**如果你用 Kimi Code：**
+```powershell
+Copy-Item -Recurse ./cli-skills/kimi/subclaw ~/.kimi-code/skills/subclaw
+```
+
+**如果你用 WorkBuddy：**
+```powershell
+Copy-Item -Recurse ./cli-skills/workbuddy/subclaw ~/.workbuddy/skills/subclaw
+```
+
+每个引擎一个独立技能包，头部均带 `ROUTING RULES`（引擎特化路由：编排者只使用自己引擎的原生委派路径；通过 runner 把其他引擎 CLI 作为外部 worker 进程是允许的）。Aider / Cursor 见 [`docs/integrations.md`](docs/integrations.md)。
 
 ### 3. 开始使用
 
@@ -136,7 +152,7 @@ chmod +x ~/.claude/scripts/live_tree_ui.py
 
 ## 基准数据
 
-> *基于下方假设的示意性测算，非独立实测；实际节省随工作负载差异很大。*
+> *基于下方假设的示意性测算，非独立实测；实际节省随工作负载、以及编排模型与 worker 模型的真实价差而变化。*
 
 | 场景 | 单独 Opus（无代理） | subclaw（Opus + 廉价虫群） | 节省 |
 |---|---|---|---|

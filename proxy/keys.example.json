@@ -1,5 +1,5 @@
 {
-  "_comment": "Claw Proxy configuration. Copy to keys.json and replace placeholders with real upstream keys.",
+  "_comment": "Claw Proxy configuration. Copy to keys.json and replace placeholders with real upstream keys. AI-facing fields (description/quota/note) should be English; keep Chinese notes in *_cn fields which /models never emits. Optional fields may be omitted entirely - /models only emits fields that are present.",
   "models": [
     {
       "key": "REPLACE_WITH_PRIMARY_KEY",
@@ -9,6 +9,7 @@
       "provider": "anthropic",
       "protocol": "anthropic",
       "tier": "primary",
+      "description": "Short English capability note returned to orchestrators by /models (helps the agent pick the right tier).",
       "capabilities": {
         "context_window": 200000,
         "max_output": 4096,
@@ -17,6 +18,11 @@
       },
       "limits": {
         "max_concurrent": 5
+      },
+      "quota": {
+        "policy": "per-model-5h-window",
+        "query_url": null,
+        "note": "Optional. Set query_url only if the provider exposes a quota-query API; otherwise leave null. Actual consumption through this proxy: GET /api/status -> model_usage."
       },
       "cost_per_1m_in": 0.25,
       "cost_per_1m_out": 1.25

@@ -249,6 +249,76 @@ def key_available(idx: int) -> bool:
     return time.time() >= state.get("open_until", 0.0)
 
 
+def pool_cooldown_seconds(model: str) -> int:
+    """Seconds until at least one key for `model` leaves cooldown; 0 if one is
+    available now (or if all are permanently disabled -> let routing fail naturally)."""
+    idxs = [
+        i
+        for i, e in enumerate(CLAW_KEYS)
+        if is_real_key(e.get("key", "")) and entry_supports_model(e, model)
+    ]
+    if not idxs:
+        return 0
+    if any(key_available(i) for i in idxs):
+        return 0
+    now = time.time()
+    pending = [KEY_HEALTH[i]["open_until"] for i in idxs if KEY_HEALTH.get(i) and KEY_HEALTH[i]["open_until"] > now]
+    if pending:
+        return max(1, int(min(pending) - now))
+    return 0
+
+
+def normalize_upstream_error(status: int, body: bytes, headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """Flatten any upstream error shape (anthropic/openai/misc) into one stable
+    JSON envelope so every client/agent can parse it the same way."""
+    text = (body or b"").decode("utf-8", errors="replace")[:2000]
+    msg = text
+    typ = "upstream_error"
+    try:
+        data = json.loads(text)
+        err = data.get("error") if isinstance(data, dict) else None
+        if isinstance(err, dict):
+            msg = str(err.get("message") or err.get("msg") or err.get("detail") or text)
+            typ = str(err.get("type") or err.get("code") or typ)
+        elif isinstance(err, str) and err:
+            msg = err
+    except Exception:
+        pass
+    if status == 429:
+        typ = "rate_limited"
+    elif status in (401, 403):
+        typ = "auth_error"
+    elif 500 <= status <= 599:
+        typ = "upstream_5xx"
+    elif status == 0:
+        typ = "upstream_unreachable"
+    out: Dict[str, Any] = {"type": typ, "message": msg[:500], "upstream_status": status}
+    retry_after = parse_retry_after(headers or {})
+    if retry_after is not None:
+        out["retry_after_sec"] = int(retry_after)
+    return {"error": out}
+
+
+# Per-model consumption since this proxy process started ("this session").
+# Upstream platforms (e.g. SenseNova) expose no quota API, so the proxy tracks
+# what flowed through it itself. requests counts usage-bearing responses.
+MODEL_USAGE: Dict[str, Dict[str, int]] = {}
+
+
+def record_model_usage(model: str, input_tokens: Any, output_tokens: Any) -> None:
+    if not model:
+        return
+    try:
+        tin = int(input_tokens or 0)
+        tout = int(output_tokens or 0)
+    except (TypeError, ValueError):
+        return
+    entry = MODEL_USAGE.setdefault(model, {"requests": 0, "input_tokens": 0, "output_tokens": 0})
+    entry["requests"] += 1
+    entry["input_tokens"] += tin
+    entry["output_tokens"] += tout
+
+
 # --- Client identity + budget --------------------------------------------
 
 
@@ -1065,7 +1135,8 @@ async def stream_openai_from_anthropic(request: Request, payload: Dict[str, Any]
                 ) as up:
                     if up.status_code != 200:
                         err = await up.aread()
-                        yield f"data: {json.dumps({'error': {'message': err.decode('utf-8', errors='replace')[:500]}})}\n\n"
+                        record_key_failure(idx, up.status_code, dict(up.headers))
+                        yield f"data: {json.dumps(normalize_upstream_error(up.status_code, err), ensure_ascii=False)}\n\n"
                         return
                     buffer = ""
                     tool_index = 0
@@ -1201,7 +1272,7 @@ async def stream_responses(request: Request, openai_req: Dict[str, Any], model: 
                                 "response": {
                                     "id": resp_id,
                                     "status": "failed",
-                                    "error": {"message": err.decode("utf-8", errors="replace")[:500]},
+                                    "error": normalize_upstream_error(up.status_code, err)["error"],
                                 },
                             },
                         )
@@ -1421,6 +1492,7 @@ async def stream_responses(request: Request, openai_req: Dict[str, Any], model: 
         stats.input_tokens += total_input
         stats.output_tokens += total_output
         stats.cache_read_tokens += total_cached
+        record_model_usage(model, total_input, total_output)
         if total_cached > 0:
             stats.cache_hits += 1
         elif total_input or total_output:
@@ -1555,6 +1627,11 @@ def status_payload() -> Dict[str, Any]:
         {
             "orchestrator": "Claw Proxy",
             "keys_config": CLAW_KEYS_FILE,
+            "model_usage": {
+                "note": "per-model consumption since proxy start (this session); upstream quota not queryable for SenseNova",
+                "since": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(stats.start_time)),
+                "models": MODEL_USAGE,
+            },
             "key_pool": {
                 "total": len(CLAW_KEYS),
                 "real": len([e for e in CLAW_KEYS if is_real_key(e.get("key", ""))]),
@@ -1885,6 +1962,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Claw Proxy", lifespan=lifespan)
 
 
+@app.exception_handler(RuntimeError)
+async def runtime_error_handler(request: Request, exc: RuntimeError):
+    # e.g. select_key raises "No configured key supports model X" -> stable JSON for agents.
+    return JSONResponse(
+        status_code=503,
+        content={"error": {"type": "no_upstream_capacity", "message": str(exc)}},
+    )
+
+
 @app.get("/")
 async def root():
     return {"service": "claw-proxy", "ui": "/ui", "models": "/models", "stats": "/stats"}
@@ -2027,6 +2113,13 @@ async def chat_completions(request: Request):
     budget_denied = check_client_budget(request, model)
     if budget_denied is not None:
         return budget_denied
+    cooldown = pool_cooldown_seconds(model)
+    if cooldown > 0:
+        return JSONResponse(
+            status_code=429,
+            headers={"Retry-After": str(cooldown)},
+            content={"error": {"type": "capacity_cooldown", "message": f"all upstream keys for '{model}' are cooling down; retry in {cooldown}s", "retry_after_sec": cooldown}},
+        )
     charge_client(request, model, estimate_tokens(json.dumps(body.get("messages", []), ensure_ascii=False)), 1024)
     _, selected_entry = select_key(model, session_id=session_id)
     protocol = selected_entry.get("protocol", "anthropic")
@@ -2038,7 +2131,7 @@ async def chat_completions(request: Request):
             request, "/v1/messages", payload, model, session_id, "openai", "anthropic"
         )
         if status != 200:
-            return Response(content=raw, status_code=status if status else 502, media_type="application/json")
+            return JSONResponse(status_code=status if status else 502, content=normalize_upstream_error(status, raw))
         anthropic_resp = json.loads(raw)
         return JSONResponse(content=anthropic_to_openai_response(anthropic_resp, model), status_code=200)
     if body.get("stream"):
@@ -2047,11 +2140,12 @@ async def chat_completions(request: Request):
         request, "/v1/chat/completions", body, model, session_id, "openai", "openai"
     )
     if status != 200:
-        return Response(content=raw, status_code=status if status else 502, media_type="application/json")
+        return JSONResponse(status_code=status if status else 502, content=normalize_upstream_error(status, raw))
     try:
         usage = json.loads(raw).get("usage", {})
         stats.input_tokens += usage.get("prompt_tokens", 0)
         stats.output_tokens += usage.get("completion_tokens", 0)
+        record_model_usage(model, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
         cached = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0)
         stats.cache_read_tokens += cached
         stats.cache_hits += 1 if cached else 0
@@ -2076,6 +2170,13 @@ async def messages(request: Request):
     budget_denied = check_client_budget(request, model)
     if budget_denied is not None:
         return budget_denied
+    cooldown = pool_cooldown_seconds(model)
+    if cooldown > 0:
+        return JSONResponse(
+            status_code=429,
+            headers={"Retry-After": str(cooldown)},
+            content={"error": {"type": "capacity_cooldown", "message": f"all upstream keys for '{model}' are cooling down; retry in {cooldown}s", "retry_after_sec": cooldown}},
+        )
     charge_client(
         request, model, estimate_messages_tokens(body.get("system", ""), body.get("messages", []), body.get("tools", [])), 1024
     )
@@ -2116,7 +2217,7 @@ async def messages(request: Request):
         return await stream_anthropic_from_openai(request, payload, model, session_id)
     status, raw, _, _, _ = await post_with_failover(request, path, payload, model, session_id, "anthropic", proto)
     if status != 200:
-        return Response(content=raw, status_code=status if status else 502, media_type="application/json")
+        return JSONResponse(status_code=status if status else 502, content=normalize_upstream_error(status, raw))
     if proto == "anthropic":
         return Response(content=raw, status_code=200, media_type="application/json")
     openai_resp = json.loads(raw)
@@ -2136,6 +2237,13 @@ async def responses(request: Request):
     budget_denied = check_client_budget(request, model)
     if budget_denied is not None:
         return budget_denied
+    cooldown = pool_cooldown_seconds(model)
+    if cooldown > 0:
+        return JSONResponse(
+            status_code=429,
+            headers={"Retry-After": str(cooldown)},
+            content={"error": {"type": "capacity_cooldown", "message": f"all upstream keys for '{model}' are cooling down; retry in {cooldown}s", "retry_after_sec": cooldown}},
+        )
     charge_client(
         request,
         model,
@@ -2156,7 +2264,7 @@ async def responses(request: Request):
             request, "/v1/messages", payload, model, session_id, "codex", "anthropic"
         )
         if status != 200:
-            return Response(content=raw, status_code=status if status else 502, media_type="application/json")
+            return JSONResponse(status_code=status if status else 502, content=normalize_upstream_error(status, raw))
         anthropic_resp = json.loads(raw)
         text = ""
         tool_calls = []
@@ -2190,7 +2298,7 @@ async def responses(request: Request):
             request, "/v1/chat/completions", openai_req, model, session_id, "codex", "openai"
         )
         if status != 200:
-            return Response(content=raw, status_code=status if status else 502, media_type="application/json")
+            return JSONResponse(status_code=status if status else 502, content=normalize_upstream_error(status, raw))
         openai_resp = json.loads(raw)
     return JSONResponse(content=openai_chat_to_responses(openai_resp, model), status_code=200)
 
